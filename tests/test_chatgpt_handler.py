@@ -122,3 +122,39 @@ def test_close_quits_driver(settings):
     handler.close()
     assert driver.quit_called is True
     assert handler.driver is None
+
+
+def test_wait_answer_does_not_return_first_partial_chunk(settings, monkeypatch):
+    settings.gpt_timeout = 20
+    driver = DriverMock()
+    handler = ChatGPTHandler(settings, driver_factory=lambda **kwargs: driver)
+    handler.driver = driver
+
+    clock = {"now": 0.0, "reads": 0}
+    partial = Element("АХАХАХА")
+    complete = Element("АХАХАХА. Канал связи живой, и весь ответ дошёл.")
+
+    def monotonic():
+        return clock["now"]
+
+    def sleep(seconds):
+        clock["now"] += seconds
+
+    def assistant_messages():
+        clock["reads"] += 1
+        # Keep the first fragment unchanged long enough to trigger the old
+        # one-second heuristic, then simulate the DOM continuing to stream.
+        if clock["now"] < 2.0:
+            return [partial]
+        return [complete]
+
+    monkeypatch.setattr("abie_gpt.chatgpt.handler.time.monotonic", monotonic)
+    monkeypatch.setattr("abie_gpt.chatgpt.handler.time.sleep", sleep)
+    monkeypatch.setattr(handler, "_assistant_messages", assistant_messages)
+    monkeypatch.setattr(handler, "_visible", lambda selectors: False)
+
+    text, completed = handler._wait_answer(0)
+
+    assert completed is True
+    assert text == complete.text
+    assert clock["now"] >= 4.5
