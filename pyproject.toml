@@ -1,23 +1,37 @@
 [project]
 name = "chatgpt-max-bot"
-version = "0.1.0"
-description = "Мост между MAX-ботом и ChatGPT через браузер"
+version = "0.2.0"
+description = "MAX client, ChatGPT browser adapter and config-driven audit runtime"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
-    "chatgpt-browser>=0.1.0",
     "seleniumbase>=4.30.0",
     "maxapi>=0.1.0",
-    "setuptools>=69.0.0",
-    "python-dotenv",
-    "maxapi"
+    "python-dotenv>=1.0.0",
+    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "pytest>=8.0",
     "ruff>=0.6.0",
 ]
 
+[project.scripts]
+abie-gpt = "abie_gpt.bootstrap:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+
 [tool.uv]
-# uv будет использовать Python 3.11 по умолчанию для этого проекта
 python-preference = "managed"
