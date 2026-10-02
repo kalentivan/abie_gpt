@@ -122,17 +122,43 @@ class ChatGPTHandler:
         return self.driver.find_elements("css selector", ASSISTANT_MESSAGES)
 
     def _wait_answer(self, before: int) -> tuple[str, bool]:
+        """Wait until a new assistant message is stable and generation is truly idle."""
         deadline = time.monotonic() + self.settings.gpt_timeout
-        last, stable_since = "", None
+        last = ""
+        changed_at: float | None = None
+        idle_checks = 0
+        # ChatGPT can briefly expose partial text before/while the stop control
+        # changes state. A single idle observation must never finalize a reply.
+        stable_seconds = 2.5
+        required_idle_checks = 4
+
         while time.monotonic() < deadline:
             messages = self._assistant_messages()
             if len(messages) > before:
                 current = messages[-1].text.strip()
-                if current != last and current:
-                    last, stable_since = current, time.monotonic()
-                elif last and stable_since and time.monotonic() - stable_since >= 1 and not self._visible(STOP_BUTTONS):
-                    return last, True
+                if current and current != last:
+                    last = current
+                    changed_at = time.monotonic()
+                    idle_checks = 0
+                elif last and changed_at is not None:
+                    if self._visible(STOP_BUTTONS):
+                        idle_checks = 0
+                    else:
+                        idle_checks += 1
+                        stable = time.monotonic() - changed_at >= stable_seconds
+                        if stable and idle_checks >= required_idle_checks:
+                            # Re-read immediately before returning so a late DOM
+                            # update cannot be lost between stability checks.
+                            newest = self._assistant_messages()
+                            final = newest[-1].text.strip() if len(newest) > before else ""
+                            if final == last:
+                                return last, True
+                            if final:
+                                last = final
+                                changed_at = time.monotonic()
+                                idle_checks = 0
             time.sleep(0.25)
+
         if last:
             return last, False
         raise TimeoutError("ChatGPT response timeout")
