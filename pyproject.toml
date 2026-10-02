@@ -8,7 +8,7 @@ dependencies = [
     "seleniumbase>=4.30.0",
     "maxapi>=0.1.0",
     "python-dotenv>=1.0.0",
-    "PyYAML>=6.0",
+    "PyYAML>=6.0",\n    "SQLAlchemy>=2.0",
 ]
 
 [project.optional-dependencies]
