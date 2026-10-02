@@ -81,3 +81,50 @@ class Database:
             else:
                 row.chatgpt_id, row.chatgpt_url, row.updated_at = chatgpt_id, chatgpt_url, now
             db.commit()
+
+class AutorunRecord(Base):
+    __tablename__ = "autoruns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_key: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    iteration: Mapped[int] = mapped_column(Integer, default=0)
+    max_iterations: Mapped[int] = mapped_column(Integer, default=50)
+    stop_marker: Mapped[str] = mapped_column(String(255), default="СТОП АУДИТ")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+    def set_autorun(self, external_key: str, enabled: bool, *, max_iterations: int = 50,
+                    stop_marker: str = "СТОП АУДИТ") -> None:
+        now = datetime.now(timezone.utc)
+        with self.session() as db:
+            row = db.query(AutorunRecord).filter_by(external_key=external_key).one_or_none()
+            if row is None:
+                row = AutorunRecord(
+                    external_key=external_key, enabled=enabled, iteration=0,
+                    max_iterations=max_iterations, stop_marker=stop_marker, updated_at=now,
+                )
+                db.add(row)
+            else:
+                row.enabled = enabled
+                row.max_iterations = max_iterations
+                row.stop_marker = stop_marker
+                row.updated_at = now
+                if enabled:
+                    row.iteration = 0
+            db.commit()
+
+    def get_autorun(self, external_key: str) -> AutorunRecord | None:
+        with self.session() as db:
+            row = db.query(AutorunRecord).filter_by(external_key=external_key).one_or_none()
+            if row is not None:
+                db.expunge(row)
+            return row
+
+    def advance_autorun(self, external_key: str) -> int:
+        with self.session() as db:
+            row = db.query(AutorunRecord).filter_by(external_key=external_key).one()
+            row.iteration += 1
+            row.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            return row.iteration
