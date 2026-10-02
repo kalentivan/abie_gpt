@@ -26,7 +26,7 @@ class MaxBotHandler:
         command = text.casefold()
         try:
             if command in {"/new", "нд", "новый диалог"}:
-                chat = await asyncio.to_thread(self.service.new_chat)
+                key = self._conversation_key(event)\n                chat = await asyncio.to_thread(self.service.new_chat, key)
                 await event.message.answer(f"Новый диалог открыт: {chat.url}")
                 return
             if command in {"/stop", "стоп"}:
@@ -41,7 +41,7 @@ class MaxBotHandler:
                 await event.message.answer(f"Скриншот: {path.name}")
                 return
 
-            answer = await asyncio.to_thread(self.service.ask, text)
+            key = self._conversation_key(event)\n            answer = await asyncio.to_thread(self.service.ask, key, text)
             for chunk in split_message(answer, self.settings.max_message_length):
                 await event.message.answer(chunk)
         except Exception as exc:
