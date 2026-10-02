@@ -23,6 +23,7 @@ dev = [
 [project.scripts]
 abie-gpt = "abie_gpt.bootstrap:main"
 abie-gpt-gui = "abie_gpt.desktop:main"
+abie-gpt-smoke = "abie_gpt.testing.monolith:main"
 
 [build-system]
 requires = ["setuptools>=69"]
