@@ -63,3 +63,21 @@ class Database:
                 row.conversation_id, row.last_response = conversation_id, last_response
                 row.completed, row.updated_at = completed, now
             db.commit()
+
+    def get_conversation(self, external_key: str) -> ConversationRecord | None:
+        with self.session() as db:
+            return db.query(ConversationRecord).filter_by(external_key=external_key).one_or_none()
+
+    def save_conversation(self, external_key: str, chatgpt_id: str | None, chatgpt_url: str) -> None:
+        now = datetime.now(timezone.utc)
+        with self.session() as db:
+            row = db.query(ConversationRecord).filter_by(external_key=external_key).one_or_none()
+            if row is None:
+                row = ConversationRecord(
+                    external_key=external_key, chatgpt_id=chatgpt_id,
+                    chatgpt_url=chatgpt_url, updated_at=now,
+                )
+                db.add(row)
+            else:
+                row.chatgpt_id, row.chatgpt_url, row.updated_at = chatgpt_id, chatgpt_url, now
+            db.commit()
