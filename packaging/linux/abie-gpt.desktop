@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=ABIE GPT
+Comment=MAX to ChatGPT desktop client
+Exec=abie-gpt
+Terminal=false
+Categories=Network;Utility;
