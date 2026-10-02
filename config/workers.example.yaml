@@ -1,0 +1,16 @@
+version: 1
+runtime:
+  enabled: true
+  max_parallel_workers: 1
+  poll_interval_seconds: 10
+workers:
+  example-audit:
+    enabled: false
+    type: audit
+    target: example
+    chat_mode: persistent
+    initial_prompt_file: "prompts/audit_start.md"
+    continuation_prompt_file: "prompts/audit_continue.md"
+    max_iterations: 20
+    completion_markers:
+      - "СТОП АУДИТ"
