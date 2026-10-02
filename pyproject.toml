@@ -14,6 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+telegram = ["telethon>=1.36,<2"]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6.0",
@@ -24,6 +25,7 @@ dev = [
 abie-gpt = "abie_gpt.bootstrap:main"
 abie-gpt-gui = "abie_gpt.desktop:main"
 abie-gpt-smoke = "abie_gpt.testing.monolith:main"
+abie-telegram = "abie_gpt.telegram_desktop:main"
 
 [build-system]
 requires = ["setuptools>=69"]
