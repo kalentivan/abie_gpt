@@ -17,6 +17,7 @@ class Settings:
     whisper_model: str = "small"
     whisper_device: str = "cpu"
     whisper_compute_type: str = "int8"
+    log_dir: Path = Path("./var/logs")
 
     @classmethod
     def from_env(cls, require_max_token: bool = True) -> "Settings":
@@ -35,6 +36,8 @@ class Settings:
         data_dir = Path(os.getenv("DATA_DIR", "./data")).resolve()
         data_dir.mkdir(parents=True, exist_ok=True)
         database_url = os.getenv("DATABASE_URL", f"sqlite:///{data_dir / 'abie_gpt.db'}")
+        log_dir = Path(os.getenv("LOG_DIR", "./var/logs")).resolve()
+        log_dir.mkdir(parents=True, exist_ok=True)
 
         return cls(
             max_bot_token=token,
@@ -47,4 +50,5 @@ class Settings:
             whisper_model=os.getenv("WHISPER_MODEL", "small").strip(),
             whisper_device=os.getenv("WHISPER_DEVICE", "cpu").strip(),
             whisper_compute_type=os.getenv("WHISPER_COMPUTE_TYPE", "int8").strip(),
+            log_dir=log_dir,
         )
