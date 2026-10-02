@@ -2,9 +2,6 @@ from __future__ import annotations
 
 import asyncio
 
-from maxapi import Bot, Dispatcher
-from maxapi.types import MessageCreated
-
 from abie_gpt.app.service import ChatService
 from abie_gpt.core.config import Settings
 
@@ -12,14 +9,18 @@ from abie_gpt.core.config import Settings
 class MaxBotHandler:
     """MAX transport adapter. It contains no Selenium logic."""
 
-    def __init__(self, settings: Settings, service: ChatService):
+    def __init__(self, settings: Settings, service: ChatService, *, bot=None, dispatcher=None):
         self.settings = settings
         self.service = service
-        self.bot = Bot(settings.max_bot_token)
-        self.dispatcher = Dispatcher()
+        if bot is None or dispatcher is None:
+            from maxapi import Bot, Dispatcher
+            bot = bot or Bot(settings.max_bot_token)
+            dispatcher = dispatcher or Dispatcher()
+        self.bot = bot
+        self.dispatcher = dispatcher
         self.dispatcher.message_created()(self.on_message)
 
-    async def on_message(self, event: MessageCreated) -> None:
+    async def on_message(self, event) -> None:
         text = (event.message.body.text or "").strip()
         if not text:
             return
@@ -69,7 +70,8 @@ class MaxBotHandler:
         if callable(edit):
             await edit(text=text)
             return
-        body = getattr(message, "body", None)
+        sent_message = getattr(message, "message", None)
+        body = getattr(sent_message, "body", None) or getattr(message, "body", None)
         message_id = getattr(body, "mid", None) or getattr(message, "message_id", None)
         if not message_id:
             raise RuntimeError("MAX did not return the sent message id")
