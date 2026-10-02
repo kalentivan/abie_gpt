@@ -28,7 +28,7 @@ class ChatService:
         initial_prompt: str,
         continuation_prompt: str = (
             "Сразу продолжай работу с того места, где остановился. Работай максимально долго. "
-            "Если задача полностью завершена, напиши СТОП АУДИТ."
+            "Если задача полностью завершена и больше полезной работы не осталось, заверши ответ отдельной строкой TASK_COMPLETE."
         ),
     ) -> list[str]:
         state = self.database.get_autorun(external_key)
