@@ -5,8 +5,6 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
-from seleniumbase import Driver
-from selenium.webdriver.common.keys import Keys
 
 from abie_gpt.core.config import Settings
 from abie_gpt.core.models import AssistantResponse, BrowserState, Conversation
@@ -18,16 +16,21 @@ class ChatGPTHandler:
 
     CHATGPT_URL = "https://chatgpt.com/"
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, driver_factory=None):
         self.settings = settings
         self.driver = None
+        self._driver_factory = driver_factory
         self._lock = threading.RLock()
 
     def start(self) -> None:
         with self._lock:
             if self.driver:
                 return
-            self.driver = Driver(
+            factory = self._driver_factory
+            if factory is None:
+                from seleniumbase import Driver
+                factory = Driver
+            self.driver = factory(
                 browser="chrome",
                 binary_location=self.settings.brave_path,
                 user_data_dir=self.settings.browser_profile,
@@ -140,7 +143,12 @@ class ChatGPTHandler:
                 if button.is_displayed() and button.is_enabled():
                     button.click()
                     return
-        box.send_keys(Keys.ENTER)
+        try:
+            from selenium.webdriver.common.keys import Keys
+            enter = Keys.ENTER
+        except ImportError:
+            enter = "\ue007"
+        box.send_keys(enter)
 
     def _find_composer(self, timeout: float, required: bool = True):
         deadline = time.monotonic() + timeout
