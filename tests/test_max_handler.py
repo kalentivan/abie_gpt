@@ -126,3 +126,17 @@ async def test_long_answer_edits_first_chunk_and_sends_rest(settings):
     await handler.on_message(event)
     assert bot.edits[0] == ("sent-1", "abcde")
     assert event.message.answers == ["⏳ Жду ответ ChatGPT…", "fghij"]
+
+
+@pytest.mark.asyncio
+async def test_multiline_max_message_is_one_lossless_chatgpt_request(settings):
+    bot, dispatcher, service = FakeBot(), FakeDispatcher(), FakeService("OK")
+    handler = MaxBotHandler(settings, service, bot=bot, dispatcher=dispatcher)
+    original = "  первая строка\nвторая строка\n\nтретья строка\n"
+    event = FakeEvent(original)
+
+    await handler.on_message(event)
+
+    assert len(service.calls) == 1
+    assert service.calls[0] == ("42", original)
+    assert bot.edits == [("sent-1", "OK")]
