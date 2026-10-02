@@ -1,0 +1,10 @@
+.venv
+.env
+brave-profile
+downloaded_files
+latest_logs
+answer_debug.html
+*.png
+.idea
+log.txt
+__pycache__
