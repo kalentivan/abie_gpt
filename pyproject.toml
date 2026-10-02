@@ -8,17 +8,21 @@ dependencies = [
     "seleniumbase>=4.30.0",
     "maxapi>=0.1.0",
     "python-dotenv>=1.0.0",
-    "PyYAML>=6.0",\n    "SQLAlchemy>=2.0",\n    "faster-whisper>=1.1.0",
+    "PyYAML>=6.0",
+    "SQLAlchemy>=2.0",
+    "faster-whisper>=1.1.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6.0",
+    "pyinstaller>=6.0",
 ]
 
 [project.scripts]
 abie-gpt = "abie_gpt.bootstrap:main"
+abie-gpt-gui = "abie_gpt.desktop:main"
 
 [build-system]
 requires = ["setuptools>=69"]
