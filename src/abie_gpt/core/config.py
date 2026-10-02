@@ -14,6 +14,9 @@ class Settings:
     database_url: str
     gpt_timeout: int = 900
     max_message_length: int = 3900
+    whisper_model: str = "small"
+    whisper_device: str = "cpu"
+    whisper_compute_type: str = "int8"
 
     @classmethod
     def from_env(cls, require_max_token: bool = True) -> "Settings":
@@ -41,4 +44,7 @@ class Settings:
             database_url=database_url,
             gpt_timeout=int(os.getenv("GPT_TIMEOUT", "900")),
             max_message_length=int(os.getenv("MAX_MESSAGE_LENGTH", "3900")),
+            whisper_model=os.getenv("WHISPER_MODEL", "small").strip(),
+            whisper_device=os.getenv("WHISPER_DEVICE", "cpu").strip(),
+            whisper_compute_type=os.getenv("WHISPER_COMPUTE_TYPE", "int8").strip(),
         )
