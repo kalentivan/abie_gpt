@@ -47,6 +47,18 @@ class MaxBotHandler:
         except Exception as exc:
             await event.message.answer(f"Ошибка: {type(exc).__name__}: {exc}")
 
+    async def _edit_sent_message(self, message, text: str) -> None:
+        """Replace a temporary status message with the final result."""
+        edit = getattr(message, "edit", None)
+        if callable(edit):
+            await edit(text=text)
+            return
+        body = getattr(message, "body", None)
+        message_id = getattr(body, "mid", None) or getattr(message, "message_id", None)
+        if not message_id:
+            raise RuntimeError("MAX did not return the sent message id")
+        await self.bot.edit_message(message_id=str(message_id), text=text)
+
     async def run(self) -> None:
         await self.dispatcher.start_polling(self.bot)
 
