@@ -93,7 +93,10 @@ class DesktopApp:
 
     def _browse(self, key: str) -> None:
         if key == "BRAVE_PATH":
-            value = filedialog.askopenfilename(title="Выберите brave.exe")
+            value = filedialog.askopenfilename(
+                title="Выберите Brave",
+                filetypes=[("Executable", "*.exe")] if os.name == "nt" else [("All files", "*")],
+            )
         else:
             value = filedialog.askdirectory(title="Выберите папку")
         if value:
@@ -144,6 +147,8 @@ class DesktopApp:
         path = app_dir()
         if os.name == "nt":
             os.startfile(path)  # type: ignore[attr-defined]
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(path)])
         else:
             subprocess.Popen(["xdg-open", str(path)])
 
