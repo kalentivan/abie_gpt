@@ -26,7 +26,8 @@ class MaxBotHandler:
         command = text.casefold()
         try:
             if command in {"/new", "нд", "новый диалог"}:
-                key = self._conversation_key(event)\n                chat = await asyncio.to_thread(self.service.new_chat, key)
+                key = self._conversation_key(event)
+                chat = await asyncio.to_thread(self.service.new_chat, key)
                 await event.message.answer(f"Новый диалог открыт: {chat.url}")
                 return
             if command in {"/stop", "стоп"}:
@@ -41,11 +42,26 @@ class MaxBotHandler:
                 await event.message.answer(f"Скриншот: {path.name}")
                 return
 
-            key = self._conversation_key(event)\n            answer = await asyncio.to_thread(self.service.ask, key, text)
-            for chunk in split_message(answer, self.settings.max_message_length):
-                await event.message.answer(chunk)
+            key = self._conversation_key(event)
+            waiting = await event.message.answer("⏳ Жду ответ ChatGPT…")
+            answer = await asyncio.to_thread(self.service.ask, key, text)
+            chunks = split_message(answer, self.settings.max_message_length)
+            if waiting is not None and chunks:
+                await self._edit_sent_message(waiting, chunks[0])
+                for chunk in chunks[1:]:
+                    await event.message.answer(chunk)
+            else:
+                for chunk in chunks:
+                    await event.message.answer(chunk)
         except Exception as exc:
-            await event.message.answer(f"Ошибка: {type(exc).__name__}: {exc}")
+            error = f"❌ Ошибка: {type(exc).__name__}: {exc}"
+            if "waiting" in locals() and waiting is not None:
+                try:
+                    await self._edit_sent_message(waiting, error)
+                    return
+                except Exception:
+                    pass
+            await event.message.answer(error)
 
     async def _edit_sent_message(self, message, text: str) -> None:
         """Replace a temporary status message with the final result."""
@@ -66,7 +82,8 @@ class MaxBotHandler:
 def split_message(text: str, limit: int) -> list[str]:
     chunks, remaining = [], text.strip()
     while len(remaining) > limit:
-        cut = remaining.rfind("\n", 0, limit)
+        cut = remaining.rfind("
+", 0, limit)
         if cut < limit // 2:
             cut = remaining.rfind(" ", 0, limit)
         if cut < limit // 2:
