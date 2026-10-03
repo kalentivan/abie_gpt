@@ -7,7 +7,7 @@ requires-python = ">=3.11,<3.12"
 dependencies = [
     "chatgpt-browser>=0.1.0",
     "seleniumbase>=4.30.0",
-    "maxapi>=0.9.14",
+    "maxapi @ git+https://github.com/love-apples/maxapi.git",
     "setuptools>=69.0.0",
     "python-dotenv",
     "requests>=2.32.0",
