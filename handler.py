@@ -170,6 +170,10 @@ class ChatGPTHandler:
         response.raise_for_status()
 
         disposition = response.headers.get("content-disposition", "")
+        content_type = response.headers.get("content-type", "").lower()
+        if "attachment" not in disposition.lower() and "text/html" in content_type:
+            return None
+
         name = None
         if "filename=" in disposition:
             name = disposition.split("filename=", 1)[1].strip().strip('"')
