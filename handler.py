@@ -1,6 +1,9 @@
 import os
+import shutil
 import time
 from pathlib import Path
+
+import requests
 
 from seleniumbase import Driver
 from selenium.webdriver.common.keys import Keys
@@ -9,6 +12,8 @@ BRAVE_PATH = os.environ["BRAVE_PATH"]
 BOT_PROFILE = os.environ["BOT_PROFILE"]
 SCREENSHOT_PATH = Path(os.environ["SCREENSHOT_PATH"])
 GPT_TIMEOUT = int(os.environ["GPT_TIMEOUT"])
+GPT_DOWNLOADS = Path(os.getenv("GPT_DOWNLOADS", "runtime/gpt-downloads")).resolve()
+GPT_DOWNLOADS.mkdir(parents=True, exist_ok=True)
 
 
 class ChatGPTHandler:
@@ -120,6 +125,80 @@ class ChatGPTHandler:
 
         self.log("Кнопка отправки не найдена, использую Enter")
         input_box.send_keys(Keys.ENTER)
+
+    def upload_files(self, paths):
+        paths = [Path(path).resolve() for path in paths]
+        if not paths:
+            return
+
+        inputs = self.driver.find_elements("css selector", 'input[type="file"]')
+        if not inputs:
+            raise RuntimeError("Не найден input[type=file] ChatGPT")
+
+        file_input = inputs[-1]
+        file_input.send_keys("\n".join(str(path) for path in paths))
+        self.log("Загружены файлы: " + ", ".join(path.name for path in paths))
+        time.sleep(2)
+
+    def _assistant_links(self):
+        try:
+            labels = self.driver.find_elements(
+                "xpath",
+                "//h4[normalize-space()='ChatGPT said:']",
+            )
+            if not labels:
+                return []
+            turn = labels[-1].find_element("xpath", "./following-sibling::*[1]")
+            return [
+                link.get_attribute("href")
+                for link in turn.find_elements("css selector", "a[href]")
+                if link.get_attribute("href")
+            ]
+        except Exception as error:
+            self.log(f"Не удалось прочитать ссылки assistant: {error}")
+            return []
+
+    def _download_url(self, url):
+        if not url.startswith(("http://", "https://")):
+            return None
+
+        session = requests.Session()
+        for cookie in self.driver.get_cookies():
+            session.cookies.set(cookie["name"], cookie["value"])
+
+        response = session.get(url, timeout=120, stream=True, allow_redirects=True)
+        response.raise_for_status()
+
+        disposition = response.headers.get("content-disposition", "")
+        name = None
+        if "filename=" in disposition:
+            name = disposition.split("filename=", 1)[1].strip().strip('"')
+        if not name:
+            name = Path(response.url.split("?", 1)[0]).name
+        if not name:
+            return None
+
+        target = GPT_DOWNLOADS / Path(name).name
+        with target.open("wb") as output:
+            shutil.copyfileobj(response.raw, output)
+        return target
+
+    def download_assistant_files(self):
+        result = []
+        for url in self._assistant_links():
+            try:
+                path = self._download_url(url)
+                if path and path.is_file():
+                    result.append(path)
+            except Exception as error:
+                self.log(f"Не удалось скачать {url}: {error}")
+        return result
+
+    def send_with_files(self, prompt, paths=None):
+        if paths:
+            self.upload_files(paths)
+        answer = self.send(prompt)
+        return answer, self.download_assistant_files()
 
     def send(self, prompt):
         self.log("=" * 50)

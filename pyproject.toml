@@ -10,6 +10,9 @@ dependencies = [
     "maxapi>=0.1.0",
     "setuptools>=69.0.0",
     "python-dotenv",
+    "requests>=2.32.0",
+    "faster-whisper>=1.1.0",
+    "py7zr>=0.22.0",
     "maxapi"
 ]
 
