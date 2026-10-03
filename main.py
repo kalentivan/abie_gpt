@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import maxapi
 from maxapi import Bot, Dispatcher
 from maxapi.types import InputMedia, MessageCreated
 
@@ -91,6 +92,12 @@ async def message(event: MessageCreated):
 
 
 async def main():
+    print(f"maxapi loaded from: {Path(maxapi.__file__).resolve()}")
+    try:
+        from maxapi.enums.update import UpdateType
+        print("maxapi update types:", [str(item.value) for item in UpdateType])
+    except Exception as error:
+        print(f"maxapi diagnostics failed: {error}")
     await asyncio.to_thread(gpt.start)
     print("MAX <-> ChatGPT запущен")
     print("НД = новый диалог | СШ = скриншот | РАСПАКУЙ = извлечь архив")
