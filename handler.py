@@ -135,10 +135,27 @@ class ChatGPTHandler:
         if not inputs:
             raise RuntimeError("Не найден input[type=file] ChatGPT")
 
-        file_input = inputs[-1]
-        file_input.send_keys("\n".join(str(path) for path in paths))
-        self.log("Загружены файлы: " + ", ".join(path.name for path in paths))
-        time.sleep(2)
+        payload = "\n".join(str(path) for path in paths)
+        errors = []
+        for file_input in reversed(inputs):
+            try:
+                self.driver.execute_script(
+                    "arguments[0].style.display='block';"
+                    "arguments[0].style.visibility='visible';"
+                    "arguments[0].removeAttribute('hidden');",
+                    file_input,
+                )
+                file_input.send_keys(payload)
+                self.log("Загружены файлы: " + ", ".join(path.name for path in paths))
+                time.sleep(2)
+                return
+            except Exception as error:
+                errors.append(f"{type(error).__name__}: {error}")
+                self.log(f"Upload input не подошёл: {errors[-1]}")
+
+        raise RuntimeError(
+            "Не удалось загрузить файл в ChatGPT: " + " | ".join(errors[-3:])
+        )
 
     def _assistant_links(self):
         try:
