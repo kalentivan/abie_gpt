@@ -1,6 +1,7 @@
 import os
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 from pathlib import Path
@@ -27,6 +28,19 @@ def _branch_for(version: str) -> str:
     return VERSION_BRANCHES.get(value.lower(), value)
 
 
+def _remove_readonly(func, path, exc_info):
+    try:
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    except Exception:
+        raise exc_info[1]
+
+
+def _rmtree(path: Path) -> None:
+    if path.exists():
+        shutil.rmtree(path, onerror=_remove_readonly)
+
+
 def _run(*args: str, cwd: Path | None = None) -> str:
     completed = subprocess.run(
         args,
@@ -44,8 +58,8 @@ def create_repo_snapshot(version: str) -> tuple[Path, str, str]:
     branch = _branch_for(version)
     safe_branch = re.sub(r"[^a-zA-Z0-9._-]+", "_", branch).strip("._-") or "snapshot"
 
-    with tempfile.TemporaryDirectory(prefix="abie-pull-") as tmp:
-        root = Path(tmp)
+    root = Path(tempfile.mkdtemp(prefix="abie-pull-"))
+    try:
         checkout = root / "ABIE"
 
         _run(
@@ -62,8 +76,7 @@ def create_repo_snapshot(version: str) -> tuple[Path, str, str]:
         commit = _run("git", "rev-parse", "HEAD", cwd=checkout)
 
         git_dir = checkout / ".git"
-        if git_dir.exists():
-            shutil.rmtree(git_dir)
+        _rmtree(git_dir)
 
         target_base = SNAPSHOT_DIR / f"ABIE-{safe_branch}-{commit[:8]}"
         archive = Path(
@@ -73,5 +86,6 @@ def create_repo_snapshot(version: str) -> tuple[Path, str, str]:
                 root_dir=checkout,
             )
         )
-
-    return archive, branch, commit
+        return archive, branch, commit
+    finally:
+        _rmtree(root)
