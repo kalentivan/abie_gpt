@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, create_engine
+from sqlalchemy import Boolean, DateTime, Integer, String, Text, UniqueConstraint, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 
@@ -17,6 +17,18 @@ class ConversationRecord(Base):
     chatgpt_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     chatgpt_url: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class NamedDialogRecord(Base):
+    __tablename__ = "named_dialogs"
+    __table_args__ = (UniqueConstraint("owner_key", "name", name="uq_named_dialog_owner_name"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_key: Mapped[str] = mapped_column(String(255), index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    chatgpt_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    chatgpt_url: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class WorkerStateRecord(Base):
@@ -88,6 +100,48 @@ class Database:
             else:
                 row.chatgpt_id, row.chatgpt_url, row.updated_at = chatgpt_id, chatgpt_url, now
             db.commit()
+
+    def save_named_dialog(self, owner_key: str, name: str, chatgpt_id: str | None,
+                          chatgpt_url: str) -> NamedDialogRecord:
+        now = datetime.now(timezone.utc)
+        with self.session() as db:
+            row = db.query(NamedDialogRecord).filter_by(owner_key=owner_key, name=name).one_or_none()
+            if row is None:
+                row = NamedDialogRecord(owner_key=owner_key, name=name, chatgpt_id=chatgpt_id,
+                                        chatgpt_url=chatgpt_url, created_at=now, last_used_at=now)
+                db.add(row)
+            else:
+                row.chatgpt_id, row.chatgpt_url, row.last_used_at = chatgpt_id, chatgpt_url, now
+            db.commit()
+            db.refresh(row)
+            db.expunge(row)
+            return row
+
+    def get_named_dialog(self, owner_key: str, name: str) -> NamedDialogRecord | None:
+        with self.session() as db:
+            row = db.query(NamedDialogRecord).filter_by(owner_key=owner_key, name=name).one_or_none()
+            if row is not None:
+                db.expunge(row)
+            return row
+
+    def list_named_dialogs(self, owner_key: str) -> list[NamedDialogRecord]:
+        with self.session() as db:
+            rows = (db.query(NamedDialogRecord).filter_by(owner_key=owner_key)
+                    .order_by(NamedDialogRecord.last_used_at.desc(), NamedDialogRecord.id.desc()).all())
+            for row in rows:
+                db.expunge(row)
+            return rows
+
+    def next_dialog_name(self, owner_key: str) -> str:
+        existing = {row.name.casefold() for row in self.list_named_dialogs(owner_key)}
+        number = 1
+        while f"диалог {number}".casefold() in existing:
+            number += 1
+        return f"Диалог {number}"
+
+    def touch_named_dialog(self, owner_key: str, name: str, chatgpt_id: str | None,
+                           chatgpt_url: str) -> None:
+        self.save_named_dialog(owner_key, name, chatgpt_id, chatgpt_url)
 
     def set_autorun(self, external_key: str, enabled: bool, *, max_iterations: int = 50,
                     stop_marker: str = "TASK_COMPLETE", reset: bool = False) -> None:
