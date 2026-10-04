@@ -33,9 +33,37 @@ class MaxBotHandler:
         logger.info("MAX incoming key=%s chars=%d command=%s", key, len(text), command.startswith("/"))
         waiting = None
         try:
-            if command in {"/new", "нд", "новый диалог"}:
-                chat = await asyncio.to_thread(self.service.new_chat, key)
-                await event.message.answer(f"Новый диалог открыт: {chat.url}")
+            if command == "нд" or command.startswith("нд ") or command == "/new" or command.startswith("/new "):
+                parts = text.split(maxsplit=1)
+                name = parts[1].strip() if len(parts) == 2 else None
+                dialog_name, chat = await asyncio.to_thread(self.service.new_chat, key, name)
+                await event.message.answer(f'Создан диалог «{dialog_name}».')
+                return
+            if command == "сд":
+                dialogs = await asyncio.to_thread(self.service.list_chats, key)
+                if not dialogs:
+                    await event.message.answer("Список диалогов пуст.")
+                else:
+                    lines = ["Диалоги:"]
+                    lines.extend(("→ " if active else "  ") + name for name, active in dialogs)
+                    await event.message.answer("\n".join(lines))
+                return
+            if command == "дд" or command.startswith("дд "):
+                parts = text.split(maxsplit=1)
+                if len(parts) != 2 or not parts[1].strip():
+                    await event.message.answer("Использование: ДД название")
+                    return
+                name = parts[1].strip()
+                await asyncio.to_thread(self.service.add_current_chat, key, name)
+                await event.message.answer(f'Диалог «{name}» сохранён.')
+                return
+            if command == "вд" or command.startswith("вд "):
+                parts = text.split(maxsplit=1)
+                if len(parts) != 2 or not parts[1].strip():
+                    await event.message.answer("Использование: ВД название")
+                    return
+                name, _chat = await asyncio.to_thread(self.service.select_chat, key, parts[1].strip())
+                await event.message.answer(f'Выбран диалог «{name}».')
                 return
             if command in {"/stop", "стоп"}:
                 stopped = await asyncio.to_thread(self.service.stop)
