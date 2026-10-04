@@ -54,9 +54,25 @@ async def message(event: MessageCreated):
 
         pull_version = parse_pull_command(text)
         if pull_version:
-            archive, branch, commit = await asyncio.to_thread(create_repo_snapshot, pull_version)
+            await event.message.answer(f"ПУЛЛ {pull_version}: начинаю.")
+            loop = asyncio.get_running_loop()
+
+            def progress(status):
+                print(f"[PULL] {status}", flush=True)
+                asyncio.run_coroutine_threadsafe(
+                    event.message.answer(f"ПУЛЛ: {status}"),
+                    loop,
+                )
+
+            archive, branch, commit = await asyncio.to_thread(
+                create_repo_snapshot,
+                pull_version,
+                progress,
+            )
+            await event.message.answer("ПУЛЛ: загружаю архив в ChatGPT...")
             prompt = f"ПУЛЛ {pull_version}: свежий snapshot ABIE ветки {branch}, commit {commit}. Архив приложен."
             answer, outgoing = await asyncio.to_thread(gpt.send_with_files, prompt, [archive])
+            await event.message.answer("ПУЛЛ: ChatGPT ответил. Отправляю ответ в MAX.")
             for i in range(0, len(answer), 3900):
                 await event.message.answer(answer[i:i + 3900])
             if outgoing:
