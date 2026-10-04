@@ -55,14 +55,18 @@ def _run(*args: str, cwd: Path | None = None) -> str:
     return completed.stdout.strip()
 
 
-def create_repo_snapshot(version: str) -> tuple[Path, str, str]:
+def create_repo_snapshot(version: str, progress=None) -> tuple[Path, str, str]:
     branch = _branch_for(version)
+    if progress:
+        progress(f"Ветка: {branch}")
     safe_branch = re.sub(r"[^a-zA-Z0-9._-]+", "_", branch).strip("._-") or "snapshot"
 
     root = Path(tempfile.mkdtemp(prefix="abie-pull-"))
     try:
         checkout = root / "ABIE"
 
+        if progress:
+            progress("Клонирую репозиторий...")
         _run(
             "git",
             "clone",
@@ -75,10 +79,14 @@ def create_repo_snapshot(version: str) -> tuple[Path, str, str]:
             str(checkout),
         )
         commit = _run("git", "rev-parse", "HEAD", cwd=checkout)
+        if progress:
+            progress(f"Репозиторий получен: {commit[:8]}")
 
         git_dir = checkout / ".git"
         _rmtree(git_dir)
 
+        if progress:
+            progress("Упаковываю snapshot в ZIP...")
         target_base = SNAPSHOT_DIR / f"ABIE-{safe_branch}-{commit[:8]}"
         archive = Path(
             shutil.make_archive(
@@ -87,6 +95,8 @@ def create_repo_snapshot(version: str) -> tuple[Path, str, str]:
                 root_dir=checkout,
             )
         )
+        if progress:
+            progress(f"Архив готов: {archive.name} ({archive.stat().st_size / 1024 / 1024:.1f} MB)")
         return archive, branch, commit
     finally:
         _rmtree(root)
