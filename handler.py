@@ -169,15 +169,18 @@ class ChatGPTHandler:
             "Не удалось загрузить файл в ChatGPT: " + " | ".join(errors[-3:])
         )
 
-    def _wait_upload_ready(self, paths, timeout=120):
+    def _wait_upload_ready(self, paths, timeout=600):
         deadline = time.time() + timeout
         names = [path.name for path in paths]
         last_log = 0
+        attachment_seen = False
 
         while time.time() < deadline:
             page = self.get_page_text()
             names_visible = all(name in page for name in names)
+            attachment_seen = attachment_seen or names_visible
             send_ready = False
+
             for selector in (
                 'button[data-testid="send-button"]',
                 'button[aria-label="Send prompt"]',
@@ -194,20 +197,24 @@ class ChatGPTHandler:
                 except Exception:
                     pass
 
-            if names_visible and send_ready:
-                self.log("Вложение загружено, кнопка отправки активна")
+            # ChatGPT may remove the attachment filename from main.innerText
+            # after processing it. Once the attachment was observed, an enabled
+            # Send button is the reliable signal that the composer is ready.
+            if attachment_seen and send_ready:
+                self.log("Вложение обработано, кнопка отправки активна")
                 return
 
             if time.time() - last_log >= 3:
                 self.log(
                     f"Жду загрузку вложения... "
                     f"file={'YES' if names_visible else 'NO'}, "
+                    f"seen={'YES' if attachment_seen else 'NO'}, "
                     f"send={'YES' if send_ready else 'NO'}"
                 )
                 last_log = time.time()
             time.sleep(0.3)
 
-        raise TimeoutError("ChatGPT не подготовил вложение к отправке")
+        raise TimeoutError("ChatGPT не подготовил вложение к отправке за 10 минут")
 
     def _assistant_links(self):
         try:
