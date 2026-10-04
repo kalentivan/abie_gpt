@@ -57,9 +57,16 @@ class ChatService:
 
     def list_chats(self, external_key: str):
         active = self.database.get_conversation(external_key)
-        active_id = active.chatgpt_id if active else None
-        return [(row.name, bool(active_id and row.chatgpt_id == active_id))
-                for row in self.database.list_named_dialogs(external_key)]
+        return [
+            (
+                row.name,
+                bool(active and (
+                    (active.chatgpt_id and row.chatgpt_id == active.chatgpt_id)
+                    or row.chatgpt_url == active.chatgpt_url
+                )),
+            )
+            for row in self.database.list_named_dialogs(external_key)
+        ]
 
     def select_chat(self, external_key: str, name: str):
         row = self.database.get_named_dialog(external_key, name.strip())
