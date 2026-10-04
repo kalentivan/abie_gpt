@@ -9,3 +9,5 @@ answer_debug.html
 log.txt
 __pycache__
 audit-profiles
+.temp
+runtime
