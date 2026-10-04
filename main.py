@@ -13,6 +13,7 @@ from maxapi.types import InputMedia, MessageCreated
 
 from handler import ChatGPTHandler
 from media import download_attachments, extract_archives, is_audio_file, transcribe_audio
+from repo_snapshot import create_repo_snapshot, parse_pull_command
 
 TOKEN = os.getenv("MAX_BOT_TOKEN")
 if not TOKEN:
@@ -49,6 +50,17 @@ async def message(event: MessageCreated):
         if text.upper() == "СШ":
             path = await asyncio.to_thread(gpt.screenshot)
             await send_files(event.message, [path])
+            return
+
+        pull_version = parse_pull_command(text)
+        if pull_version:
+            archive, branch, commit = await asyncio.to_thread(create_repo_snapshot, pull_version)
+            prompt = f"ПУЛЛ {pull_version}: свежий snapshot ABIE ветки {branch}, commit {commit}. Архив приложен."
+            answer, outgoing = await asyncio.to_thread(gpt.send_with_files, prompt, [archive])
+            for i in range(0, len(answer), 3900):
+                await event.message.answer(answer[i:i + 3900])
+            if outgoing:
+                await send_files(event.message, outgoing)
             return
 
         if text.upper() == "РАСПАКУЙ":
@@ -100,7 +112,7 @@ async def main():
         print(f"maxapi diagnostics failed: {error}")
     await asyncio.to_thread(gpt.start)
     print("MAX <-> ChatGPT запущен")
-    print("НД = новый диалог | СШ = скриншот | РАСПАКУЙ = извлечь архив")
+    print("НД = новый диалог | СШ = скриншот | ПУЛЛ v2/v3 = snapshot ABIE -> ChatGPT | РАСПАКУЙ = извлечь архив")
     try:
         await dp.start_polling(bot)
     finally:
