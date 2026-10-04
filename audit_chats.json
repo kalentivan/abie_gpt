@@ -1,0 +1,191 @@
+{
+  "tg": {
+    "url": "https://chatgpt.com/c/6ac0245f-cc30-83ed-8255-b2e1f389abb3",
+    "status": "running",
+    "last_answer_hash": "8070cb3aa02934ece191cc3cbf385b7c45fcd5d4711152c871a12b148100a4d4",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "api": {
+    "url": "https://chatgpt.com/c/6ac025bd-8524-83eb-9523-2f09d9f2c9bf",
+    "status": "running",
+    "last_answer_hash": "81ae8be960f014428db18f45005fa0f9a83626b63932fe0a9a0905ad4dee3627",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "llm": {
+    "url": "https://chatgpt.com/c/6ac0226e-c920-83ed-96cf-33005ff94328",
+    "status": "running",
+    "last_answer_hash": "487b91042c7cf27a19e23ea8699f5f354b1a0c3af9e418138dc6150d830f970d",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "embedding": {
+    "url": "https://chatgpt.com/c/6ac028ed-9a98-83ed-90e4-f715dcf9b115",
+    "status": "running",
+    "last_answer_hash": "3fc023c35d6179c518c972d202bf83a8da7394c7682ff2cb562d2ffe01444c06",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "frontend": {
+    "url": "https://chatgpt.com/c/6ac0291a-0720-83eb-a426-974513715cd1",
+    "status": "running",
+    "last_answer_hash": "2765d026e1f0b04cc8aa675bf53ee5579989da0554cbbfbe9e089df706e39463",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "documents": {
+    "url": "https://chatgpt.com/c/6ac02944-463c-83eb-8c4d-d5b03a1036c7",
+    "status": "running",
+    "last_answer_hash": "9b16b44d0e0a5cac4f968befb0b5b5eba913f9ef3dfa1501ed728b6ead72a357",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "gateway": {
+    "url": "https://chatgpt.com/c/6ac0296e-b2cc-83eb-9427-5a55c730fbc1",
+    "status": "running",
+    "last_answer_hash": "40bed6ccfcdf60ff437a4d668bc8306bd155a2990ef448453727eb4f3116c834",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "studwork": {
+    "url": "https://chatgpt.com/c/6ac02999-6440-83ed-9804-0c9734dc4da2",
+    "status": "running",
+    "last_answer_hash": "0be1c0f82e20e7165cbf9c58fcb6f0b99615604af06ca06bb2d643fe0a5690a0",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "human": {
+    "url": "https://chatgpt.com/c/6ac029c4-01fc-83ed-8944-f3760367c26c",
+    "status": "done",
+    "last_answer_hash": "8d4609ab1a8579b893cd861fbbabd421beed1774438b3db149368061dc0d7e7a",
+    "stop_confirmations": 2,
+    "verified": true
+  },
+  "summary": {
+    "url": "https://chatgpt.com/c/6ac029ee-326c-83ed-b7fb-a94e8a0455ba",
+    "status": "running",
+    "last_answer_hash": "c0acdf7173ba3dab3f99ce7fc15e914d1d36e68d156f35fb8c5eaa188efd2315",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "assessor": {
+    "url": "https://chatgpt.com/c/6ac02a18-9c5c-83ed-b160-6e15365d1734",
+    "status": "running",
+    "last_answer_hash": "8d4609ab1a8579b893cd861fbbabd421beed1774438b3db149368061dc0d7e7a",
+    "stop_confirmations": 1,
+    "verified": true
+  },
+  "pricing": {
+    "url": "https://chatgpt.com/c/6ac02a43-448c-83eb-a9ca-42a937d88efa",
+    "status": "running",
+    "last_answer_hash": "22d10a5f402e225c3ba989f4fc2c312d972e0ff8e1f93cf63cecbb7d45b59bba",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "selector": {
+    "url": "https://chatgpt.com/c/6ac02a6d-dc40-83eb-ab61-114c92a80829",
+    "status": "running",
+    "last_answer_hash": "a4d7f53b2e5a1c28cb9cdbc7cf3e86f7b5abcc1bf922be5c5094383523d0363f",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "bid": {
+    "url": "https://chatgpt.com/c/6ac02a9f-6518-83ed-a4aa-af038eea8213",
+    "status": "running",
+    "last_answer_hash": "7f72d70347dc971d38c7247416724211c9d1243b635c23dba50c9518374cfd18",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "revision-diff": {
+    "url": "https://chatgpt.com/c/6ac02ac9-bbe8-83ed-b088-98d087638c01",
+    "status": "running",
+    "last_answer_hash": "74cffad796008ea7e693da253a04788705788483eae1de642280c1b35fd0e5c6",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "execution-evaluator": {
+    "url": "https://chatgpt.com/c/6ac02af4-1cb4-83eb-9a19-583fefe39236",
+    "status": "running",
+    "last_answer_hash": "73a2b26f536cd38e0c33a5507db7008a11bb04b0cf9ec2880de8f864d45860de",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "solver": {
+    "url": "https://chatgpt.com/c/6ac02b1e-36d0-83eb-9a0f-407d94972e44",
+    "status": "running",
+    "last_answer_hash": "f72d5e06ba918093192c29b88fd13ebef2c627b199ecd65ab78f68007601505d",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "prompts": {
+    "url": "https://chatgpt.com/c/6ac02b48-9760-83ed-b6da-ea3081809e94",
+    "status": "running",
+    "last_answer_hash": "94b9bc2e9b6a7553ad736764e9eff707afd5212e7c6c1f89c1e8f2cdecfa28aa",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "planner": {
+    "url": "https://chatgpt.com/c/6ac02b73-00a0-83eb-b434-0825b6a15997",
+    "status": "running",
+    "last_answer_hash": "431523f0998cfe595c3d409da94057a77a9fc51eff6a44b4a57e3abb63ee0ee2",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "analytics": {
+    "url": "https://chatgpt.com/c/6ac02b9d-bcfc-83ed-a894-aea09828824c",
+    "status": "running",
+    "last_answer_hash": "698a5d08538bde4c5bc87bec65eb87fb652291b76a551c375e44b33e86b49be8",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "monitoring": {
+    "url": "https://chatgpt.com/c/6ac02bc8-6cac-83ed-9d7b-c2b23df2f3e3",
+    "status": "running",
+    "last_answer_hash": "938c74a57a4bed9fd2ee03c34e2a80f0c812bcd295784e34af9069b7c82a3181",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "watch-dog": {
+    "url": "https://chatgpt.com/c/6ac02bf2-d1c0-83ed-9ab3-c5b5868365a7",
+    "status": "running",
+    "last_answer_hash": "2ff63e83a2e6c97c82a80764336d81d18b328b12a0863f9651eb0bbf866a8d6a",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "workflow": {
+    "url": "https://chatgpt.com/c/6ac02c1d-945c-83ed-815b-32d43c1b889b",
+    "status": "running",
+    "last_answer_hash": "da0f8a71c26dd99938db5ec14f52702cd64b9f68759f5338018b2b7924cda2c3",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "metrics": {
+    "url": "https://chatgpt.com/c/6ac02c47-e99c-83eb-a1a0-493e38831f63",
+    "status": "running",
+    "last_answer_hash": "050192733542f802e6a4313b476d26aa0d0a60b17f871eccde702e0525d2b4fe",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "codex-worker": {
+    "url": "https://chatgpt.com/c/6ac02c72-60d8-83ed-b4f9-cf2c406037f9",
+    "status": "running",
+    "last_answer_hash": "5848d92aad113f605a727a52549993907ff341f2123ec5d44672cf70a677f8fb",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "k8n": {
+    "url": "https://chatgpt.com/c/6ac02c9d-df18-83ed-8938-ba96645e71ef",
+    "status": "running",
+    "last_answer_hash": "dc7e79db79829723ff513c45f7771c8433433e1222d3b67b5bff8a32251eeed0",
+    "stop_confirmations": 0,
+    "verified": true
+  },
+  "abiecmd": {
+    "url": "https://chatgpt.com/c/6ac02cc9-daa8-83ed-b072-4d45cfad30d1",
+    "status": "running",
+    "last_answer_hash": "94b9bc2e9b6a7553ad736764e9eff707afd5212e7c6c1f89c1e8f2cdecfa28aa",
+    "stop_confirmations": 0,
+    "verified": true
+  }
+}
