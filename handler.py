@@ -105,25 +105,37 @@ class ChatGPTHandler:
             self.log(f"Не удалось прочитать assistant: {error}")
             return None
 
-    def click_send(self, input_box):
+    def click_send(self, input_box, timeout=30):
         selectors = [
             'button[data-testid="send-button"]',
             'button[aria-label="Send prompt"]',
             'button[aria-label*="Send"]',
             'button[aria-label*="Отправ"]',
         ]
+        deadline = time.time() + timeout
+        last_log = 0
 
-        for selector in selectors:
-            try:
-                for button in self.driver.find_elements("css selector", selector):
-                    if button.is_displayed() and button.is_enabled():
-                        button.click()
-                        self.log(f"Нажата кнопка отправки: {selector}")
-                        return
-            except Exception as error:
-                self.log(f"Ошибка проверки {selector}: {error}")
+        while time.time() < deadline:
+            for selector in selectors:
+                try:
+                    for button in self.driver.find_elements("css selector", selector):
+                        if button.is_displayed() and button.is_enabled():
+                            try:
+                                button.click()
+                            except Exception:
+                                self.driver.execute_script("arguments[0].click();", button)
+                            self.log(f"Нажата кнопка отправки: {selector}")
+                            return
+                except Exception as error:
+                    self.log(f"Ошибка проверки {selector}: {error}")
 
-        self.log("Кнопка отправки не найдена, использую Enter")
+            if time.time() - last_log >= 3:
+                self.log("Жду активную кнопку отправки...")
+                last_log = time.time()
+            time.sleep(0.25)
+
+        self.log("Активная кнопка отправки не появилась, использую Enter")
+        input_box = self.find_input_box()
         input_box.send_keys(Keys.ENTER)
 
     def upload_files(self, paths):
@@ -146,8 +158,8 @@ class ChatGPTHandler:
                     file_input,
                 )
                 file_input.send_keys(payload)
-                self.log("Загружены файлы: " + ", ".join(path.name for path in paths))
-                time.sleep(2)
+                self.log("Файлы переданы в composer: " + ", ".join(path.name for path in paths))
+                self._wait_upload_ready(paths)
                 return
             except Exception as error:
                 errors.append(f"{type(error).__name__}: {error}")
@@ -156,6 +168,46 @@ class ChatGPTHandler:
         raise RuntimeError(
             "Не удалось загрузить файл в ChatGPT: " + " | ".join(errors[-3:])
         )
+
+    def _wait_upload_ready(self, paths, timeout=120):
+        deadline = time.time() + timeout
+        names = [path.name for path in paths]
+        last_log = 0
+
+        while time.time() < deadline:
+            page = self.get_page_text()
+            names_visible = all(name in page for name in names)
+            send_ready = False
+            for selector in (
+                'button[data-testid="send-button"]',
+                'button[aria-label="Send prompt"]',
+                'button[aria-label*="Send"]',
+                'button[aria-label*="Отправ"]',
+            ):
+                try:
+                    if any(
+                        button.is_displayed() and button.is_enabled()
+                        for button in self.driver.find_elements("css selector", selector)
+                    ):
+                        send_ready = True
+                        break
+                except Exception:
+                    pass
+
+            if names_visible and send_ready:
+                self.log("Вложение загружено, кнопка отправки активна")
+                return
+
+            if time.time() - last_log >= 3:
+                self.log(
+                    f"Жду загрузку вложения... "
+                    f"file={'YES' if names_visible else 'NO'}, "
+                    f"send={'YES' if send_ready else 'NO'}"
+                )
+                last_log = time.time()
+            time.sleep(0.3)
+
+        raise TimeoutError("ChatGPT не подготовил вложение к отправке")
 
     def _assistant_links(self):
         try:
