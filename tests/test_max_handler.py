@@ -73,8 +73,17 @@ class FakeService:
     def screenshot(self):
         return SimpleNamespace(name="screen.png")
 
-    def new_chat(self, key):
-        return SimpleNamespace(url="https://chatgpt.local/c/new")
+    def new_chat(self, key, name=None):
+        return name or "Диалог 1", SimpleNamespace(url="https://chatgpt.local/c/new")
+
+    def list_chats(self, key):
+        return [("ABIE", True), ("Личное", False)]
+
+    def add_current_chat(self, key, name):
+        return SimpleNamespace(id="existing", url="https://chatgpt.local/c/existing")
+
+    def select_chat(self, key, name):
+        return name, SimpleNamespace(id="selected", url="https://chatgpt.local/c/selected")
 
 
 @pytest.fixture
@@ -140,3 +149,25 @@ async def test_multiline_max_message_is_one_lossless_chatgpt_request(settings):
     assert len(service.calls) == 1
     assert service.calls[0] == ("42", original)
     assert bot.edits == [("sent-1", "OK")]
+
+
+@pytest.mark.asyncio
+async def test_dialog_commands(settings):
+    bot, dispatcher, service = FakeBot(), FakeDispatcher(), FakeService()
+    handler = MaxBotHandler(settings, service, bot=bot, dispatcher=dispatcher)
+
+    event = FakeEvent("НД Тесты ABIE")
+    await handler.on_message(event)
+    assert event.message.answers == ["Создан диалог «Тесты ABIE»."]
+
+    event = FakeEvent("СД")
+    await handler.on_message(event)
+    assert event.message.answers == ["Диалоги:\n→ ABIE\n  Личное"]
+
+    event = FakeEvent("ДД Старый чат")
+    await handler.on_message(event)
+    assert event.message.answers == ["Диалог «Старый чат» сохранён."]
+
+    event = FakeEvent("ВД ABIE")
+    await handler.on_message(event)
+    assert event.message.answers == ["Выбран диалог «ABIE»."]
