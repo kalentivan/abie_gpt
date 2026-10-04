@@ -17,15 +17,20 @@ class ChatService:
             current = self.chatgpt.current_chat()
             if current.id != saved.chatgpt_id:
                 self.chatgpt.open_chat(saved.chatgpt_id)
+        active_dialog = None
+        if saved:
+            for dialog in self.database.list_named_dialogs(external_key):
+                if ((saved.chatgpt_id and dialog.chatgpt_id == saved.chatgpt_id)
+                        or dialog.chatgpt_url == saved.chatgpt_url):
+                    active_dialog = dialog
+                    break
         response = self.chatgpt.send_and_wait(text)
         current = self.chatgpt.current_chat()
         self.database.save_conversation(external_key, current.id, current.url)
-        active = self.database.get_conversation(external_key)
-        if active:
-            for dialog in self.database.list_named_dialogs(external_key):
-                if (dialog.chatgpt_id and dialog.chatgpt_id == current.id) or dialog.chatgpt_url == active.chatgpt_url:
-                    self.database.touch_named_dialog(external_key, dialog.name, current.id, current.url)
-                    break
+        if active_dialog:
+            self.database.touch_named_dialog(
+                external_key, active_dialog.name, current.id, current.url
+            )
         return response.text
 
     def new_chat(self, external_key: str, name: str | None = None):
