@@ -10,6 +10,7 @@ from pathlib import Path
 
 from seleniumbase import Driver
 from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import StaleElementReferenceException
 
 BRAVE_PATH = os.environ["BRAVE_PATH"]
 TAXI_PROFILE = Path(os.getenv("TAXI_PROFILE", "runtime/yandex-taxi-profile")).resolve()
@@ -194,14 +195,21 @@ class YandexTaxiSelenium:
             titles = []
         for title in titles:
             try:
-                container = title.find_element(
-                    "xpath", "./ancestor::*[contains(@class,'result--') or contains(@class,'suggest')][1]"
-                )
-                full = " ".join((container.text or "").split())
-            except Exception:
-                full = " ".join((title.text or "").split())
-            if full and full not in [x["text"] for x in items]:
-                items.append({"text": full, "element": title})
+                try:
+                    container = title.find_element(
+                        "xpath", "./ancestor::*[contains(@class,'result--') or contains(@class,'suggest')][1]"
+                    )
+                    full = " ".join((container.text or "").split())
+                except StaleElementReferenceException:
+                    continue
+                except Exception:
+                    full = " ".join((title.text or "").split())
+                if full and full not in [x["text"] for x in items]:
+                    items.append({"text": full, "element": title})
+            except StaleElementReferenceException:
+                # React rebuilt the suggestions list between find_elements()
+                # and reading this node. It is normal after selecting an address.
+                continue
         return items
 
     @staticmethod
@@ -249,7 +257,20 @@ class YandexTaxiSelenium:
             self.driver.execute_script("arguments[0].click();", element)
         self.log(f"Выбрана подсказка адреса: {item['text']!r}")
         deadline = time.time() + 5
-        while time.time() < deadline and self._suggestions():
+        while time.time() < deadline:
+            try:
+                visible = [
+                    x for x in self.driver.find_elements(
+                        "css selector", "[class*='result-title--']"
+                    )
+                    if x.is_displayed()
+                ]
+            except StaleElementReferenceException:
+                visible = []
+            except Exception:
+                visible = []
+            if not visible:
+                break
             time.sleep(0.2)
         time.sleep(0.4)
         return item["text"]
