@@ -82,7 +82,7 @@ class AddressBook:
             right = self.get(int(number_match.group(2)))
             if not left or not right:
                 raise ValueError("Не найден один из номеров в адресной книге.")
-            return left.address, right.address, []
+            return left.address, right.address, [True, True]
 
         if "|" not in value:
             raise ValueError("Введи два номера через пробел или два адреса через |.")
@@ -459,7 +459,9 @@ class TaxiAgent:
         if self.state == "WAITING_ROUTE":
             origin, destination, known = self.book.resolve_route(value)
             self.route_parts = [origin, destination]
-            self.route_known = known
+            if not isinstance(known, (list, tuple)) or len(known) != 2:
+                raise RuntimeError(f"Некорректный результат парсинга маршрута: known={known!r}")
+            self.route_known = [bool(known[0]), bool(known[1])]
             self.route_resolved = [None, None]
             self.provider.prepare_route()
             return self._advance_address(0)
