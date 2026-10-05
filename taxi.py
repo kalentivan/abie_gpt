@@ -219,7 +219,26 @@ class YandexTaxiSelenium:
     def begin_address(self, kind: str, value: str):
         field = self._open_address_editor(kind)
         field.click()
-        field.send_keys(Keys.CONTROL, "a")
+        # Yandex's React textarea may ignore Selenium's Ctrl+A after the editor
+        # has just been mounted. Clear it through the native value setter and
+        # dispatch an input event so React updates its state too.
+        self.driver.execute_script(
+            """
+            const el = arguments[0];
+            const setter = Object.getOwnPropertyDescriptor(
+                HTMLTextAreaElement.prototype, 'value'
+            ).set;
+            setter.call(el, '');
+            el.dispatchEvent(new Event('input', {bubbles: true}));
+            el.dispatchEvent(new Event('change', {bubbles: true}));
+            el.focus();
+            """,
+            field,
+        )
+        time.sleep(0.15)
+        field = self._field_by_hint(
+            ("Откуда поедете?",) if kind == "from" else ("Куда поедете?",)
+        ) or field
         field.send_keys(value)
         time.sleep(1.3)
         suggestions = self._suggestions()
