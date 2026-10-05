@@ -32,6 +32,22 @@ async def send_files(message, paths: list[Path]) -> None:
         await message.answer(text=path.name, attachments=[InputMedia(path=str(path))])
 
 
+async def monitor_taxi(message) -> None:
+    last_status = None
+    while taxi.state in {"ORDERING", "SEARCHING_CAR", "CAR_ASSIGNED"}:
+        await asyncio.sleep(10)
+        try:
+            status = await asyncio.to_thread(taxi.status)
+            if status != last_status:
+                await message.answer(status)
+                last_status = status
+            if taxi.state == "ARRIVED":
+                return
+        except Exception as error:
+            print(f"[TAXI] monitor error: {type(error).__name__}: {error}", flush=True)
+            return
+
+
 @dp.message_created()
 async def message(event: MessageCreated):
     global last_files
@@ -57,6 +73,8 @@ async def message(event: MessageCreated):
         if taxi.is_active() and not incoming:
             answer = await asyncio.to_thread(taxi.handle, text)
             await event.message.answer(answer)
+            if taxi.state == "ORDERING":
+                asyncio.create_task(monitor_taxi(event.message))
             return
 
         if text.upper() == "НД":
