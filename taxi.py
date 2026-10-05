@@ -190,15 +190,65 @@ class YandexTaxiSelenium:
         field.send_keys(Keys.CONTROL, "a")
         field.send_keys(value)
         time.sleep(1.2)
-        # Mobile Yandex Go shows address suggestions after typing.
-        # Prefer the first suggestion, but Enter also works when the field
-        # accepts the normalized address directly.
-        try:
+
+        # Yandex Go mobile opens a full suggestion overlay. Keyboard Enter does
+        # not reliably select a result, so click a visible result explicitly.
+        suggestions = []
+        for selector in (
+            ".result-title--mo7xY",
+            "[class*='result-title--']",
+        ):
+            try:
+                suggestions = [
+                    x for x in self.driver.find_elements("css selector", selector)
+                    if x.is_displayed()
+                ]
+            except Exception:
+                suggestions = []
+            if suggestions:
+                break
+
+        if suggestions:
+            wanted = re.sub(r"[^0-9a-zа-яё]+", " ", value.casefold()).split()
+            best = suggestions[0]
+            best_score = -1
+            for item in suggestions:
+                text = (item.text or "").casefold()
+                score = sum(1 for token in wanted if token and token in text)
+                if score > best_score:
+                    best = item
+                    best_score = score
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block:'center'});", best
+            )
+            time.sleep(0.2)
+            try:
+                best.click()
+            except Exception:
+                self.driver.execute_script("arguments[0].click();", best)
+            self.log(f"Выбрана подсказка адреса: {best.text!r}")
+        else:
+            # Fallback for another Yandex UI revision.
             field.send_keys(Keys.ARROW_DOWN)
             field.send_keys(Keys.ENTER)
-        except Exception:
-            field.send_keys(Keys.ENTER)
-        time.sleep(1.2)
+
+        # Wait until the suggestion overlay disappears before clicking the
+        # second route row; otherwise it intercepts the click.
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            try:
+                visible = [
+                    x for x in self.driver.find_elements(
+                        "css selector", "[class*='result-title--']"
+                    )
+                    if x.is_displayed()
+                ]
+            except Exception:
+                visible = []
+            if not visible:
+                break
+            time.sleep(0.2)
+        time.sleep(0.5)
 
     def _open_address_editor(self, kind: str):
         if kind == "from":
