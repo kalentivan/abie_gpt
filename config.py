@@ -50,6 +50,11 @@ class Settings(BaseSettings):
         alias="TAXI_MOBILE_USER_AGENT",
     )
 
+    media_dir: Path = Field(default=Path("runtime/media"), alias="MEDIA_DIR")
+    max_extracted_files: int = Field(default=200, alias="MAX_EXTRACTED_FILES")
+    max_extracted_bytes: int = Field(default=512 * 1024 * 1024, alias="MAX_EXTRACTED_BYTES")
+    whisper_model: str = Field(default="small", alias="WHISPER_MODEL")
+
     abie_repo_url: str = Field(
         default="https://github.com/kalentivan/abie.git",
         alias="ABIE_REPO_URL",
