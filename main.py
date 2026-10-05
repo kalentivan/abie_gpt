@@ -66,8 +66,27 @@ async def message(event: MessageCreated):
             await send_files(event.message, paths)
             return
 
-        if text.casefold() in {"закажи такси", "такси", "вызови такси"}:
+        taxi_command = text.split(maxsplit=2)
+        if (
+            taxi_command
+            and (
+                text.casefold() in {"закажи такси", "такси", "вызови такси"}
+                or text.casefold().startswith("закажи такси ")
+                or text.casefold().startswith("вызови такси ")
+            )
+        ):
+            route = ""
+            folded = text.casefold()
+            for prefix in ("закажи такси", "вызови такси", "такси"):
+                if folded == prefix or folded.startswith(prefix + " "):
+                    route = text[len(prefix):].strip()
+                    break
+
             answer = await asyncio.to_thread(taxi.start)
+            if route:
+                # Same state machine as the two-message flow, just feed the
+                # remembered address numbers immediately.
+                answer = await asyncio.to_thread(taxi.handle, route)
             await event.message.answer(answer)
             return
 
