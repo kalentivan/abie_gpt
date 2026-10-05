@@ -13,7 +13,7 @@ from maxapi.types import InputMedia, MessageCreated
 
 from handler import ChatGPTHandler
 from media import download_attachments, extract_archives, is_audio_file, transcribe_audio
-from repo_snapshot import create_repo_snapshot, parse_pull_command
+from repo_snapshot import create_repo_snapshot, parse_pull_command\nfrom taxi import TaxiAgent
 
 TOKEN = os.getenv("MAX_BOT_TOKEN")
 if not TOKEN:
@@ -41,6 +41,21 @@ async def message(event: MessageCreated):
         if incoming:
             last_files = incoming
             await event.message.answer("Файл получен: " + ", ".join(p.name for p in incoming))
+
+        if text.casefold() in {"закажи такси", "такси", "вызови такси"}:
+            answer = await asyncio.to_thread(taxi.start)
+            await event.message.answer(answer)
+            return
+
+        if text.casefold() in {"где машина", "когда машина", "статус такси"}:
+            answer = await asyncio.to_thread(taxi.status)
+            await event.message.answer(answer)
+            return
+
+        if taxi.is_active() and not incoming:
+            answer = await asyncio.to_thread(taxi.handle, text)
+            await event.message.answer(answer)
+            return
 
         if text.upper() == "НД":
             await asyncio.to_thread(gpt.new_dialog)
@@ -128,7 +143,7 @@ async def main():
         print(f"maxapi diagnostics failed: {error}")
     await asyncio.to_thread(gpt.start)
     print("MAX <-> ChatGPT запущен")
-    print("НД = новый диалог | СШ = скриншот | ПУЛЛ v2/v3 = snapshot ABIE -> ChatGPT | РАСПАКУЙ = извлечь архив")
+    print("НД = новый диалог | СШ = скриншот | ПУЛЛ <ветка> = snapshot ABIE -> ChatGPT | РАСПАКУЙ = извлечь архив | Закажи такси")
     try:
         await dp.start_polling(bot)
     finally:
