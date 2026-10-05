@@ -1,15 +1,12 @@
-import os
 import time
 from pathlib import Path
-from dotenv import load_dotenv
-
-load_dotenv()
-
 from seleniumbase import Driver
 from selenium.webdriver.common.keys import Keys
 
-BRAVE_PATH = os.environ["BRAVE_PATH"]
-BOT_PROFILE = os.environ["BOT_PROFILE"]
+from config import settings
+
+BRAVE_PATH = settings.brave_path
+BOT_PROFILE = str(settings.bot_profile)
 
 CHECK_INTERVAL = 300
 CHATGPT_URL = "https://chatgpt.com/"
