@@ -275,6 +275,41 @@ class YandexTaxiSelenium:
         time.sleep(0.4)
         return item["text"]
 
+    def _dump_route_editor(self, kind: str):
+        out_dir = TAXI_SCREENSHOT.parent
+        out_dir.mkdir(parents=True, exist_ok=True)
+        path = out_dir / f"yandex-taxi-editor-{kind}.txt"
+        rows = [f"url={self.driver.current_url}", f"kind={kind}", ""]
+        selectors = (
+            "input, textarea, [role='textbox'], [contenteditable='true'], "
+            "[class*='address--'], [class*='route'], [class*='search']"
+        )
+        try:
+            elements = self.driver.find_elements("css selector", selectors)
+        except Exception:
+            elements = []
+        for i, el in enumerate(elements):
+            try:
+                rows.extend([
+                    f"--- {i} ---",
+                    f"tag={el.tag_name}",
+                    f"displayed={el.is_displayed()} enabled={el.is_enabled()}",
+                    f"rect={el.rect}",
+                    f"text={el.text!r}",
+                    f"value={el.get_attribute('value')!r}",
+                    f"placeholder={el.get_attribute('placeholder')!r}",
+                    f"aria-label={el.get_attribute('aria-label')!r}",
+                    f"class={el.get_attribute('class')!r}",
+                    f"outerHTML={el.get_attribute('outerHTML')}",
+                    "",
+                ])
+            except StaleElementReferenceException:
+                rows.extend([f"--- {i} ---", "STALE", ""])
+        path.write_text("\n".join(rows), encoding="utf-8")
+        self.diagnostic(f"editor-{kind}")
+        self.log(f"Редактор {kind}: {path}")
+        return path
+
     def _open_address_editor(self, kind: str):
         if kind == "from":
             selectors = [
@@ -292,6 +327,7 @@ class YandexTaxiSelenium:
         row_y = row.rect.get("y", 0)
         row.click()
         time.sleep(0.6)
+        self._dump_route_editor(kind)
 
         fields = [
             x for x in self._route_fields()
