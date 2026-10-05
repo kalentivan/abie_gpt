@@ -200,68 +200,43 @@ class YandexTaxiSelenium:
             field.send_keys(Keys.ENTER)
         time.sleep(1.2)
 
+    def _open_address_editor(self, kind: str):
+        if kind == "from":
+            selectors = [
+                ("css selector", ".address--UMqe0:not(.address_to--_yFAc)"),
+                ("xpath", "//*[contains(@class,'address--UMqe0') and not(contains(@class,'address_to--'))]"),
+            ]
+        else:
+            selectors = [
+                ("css selector", ".address_to--_yFAc"),
+                ("xpath", "//*[normalize-space()='Куда поедете?']/ancestor::*[contains(@class,'address--UMqe0')][1]"),
+            ]
+        row = self._visible(selectors)
+        if not row:
+            raise RuntimeError(f"Не нашёл строку адреса {kind}")
+        row.click()
+        time.sleep(0.6)
+
+        fields = self._route_fields()
+        visible_text = [x for x in fields if (x.get_attribute("type") or "").lower() != "checkbox"]
+        if not visible_text:
+            self.diagnostic(f"address-editor-{kind}")
+            raise RuntimeError(f"После клика по адресу {kind} не появилось поле ввода")
+        return visible_text[-1]
+
     def set_route(self, origin: str, destination: str):
         with self.lock:
             self.start()
             self.driver.get(TAXI_URL)
             time.sleep(2)
 
-            origin_field = self._field_by_hint(
-                ("откуда", "адрес подачи", "место подачи", "улица")
-            )
-            destination_field = self._field_by_hint(
-                ("куда поедете", "куда", "пункт назначения")
-            )
-
-            fields = self._route_fields()
-            if origin_field is None and len(fields) >= 2:
-                origin_field = fields[0]
-            if destination_field is None:
-                candidates = [x for x in fields if origin_field is None or x.id != origin_field.id]
-                if candidates:
-                    destination_field = candidates[-1]
-
-            # In the current mobile Yandex Go page the pickup point may be a
-            # clickable row rather than an editable input. Click its visible
-            # text to switch it into edit mode and search again.
-            if origin_field is None:
-                pickup = self._visible([
-                    ("xpath", "//*[contains(normalize-space(.), 'улица') and not(self::body)]"),
-                    ("xpath", "//*[contains(normalize-space(.), 'Откуда') and not(self::body)]"),
-                ])
-                if pickup:
-                    pickup.click()
-                    time.sleep(0.5)
-                    origin_field = self._field_by_hint(("откуда", "адрес", "улица"))
-                    fields = self._route_fields()
-                    if origin_field is None and fields:
-                        origin_field = fields[0]
-
-            if destination_field is None:
-                destination = self._visible([
-                    ("xpath", "//*[normalize-space()='Куда поедете?']"),
-                    ("xpath", "//*[contains(normalize-space(.), 'Куда поедете') and not(self::body)]"),
-                ])
-                if destination:
-                    destination.click()
-                    time.sleep(0.5)
-                    destination_field = self._field_by_hint(("куда", "адрес"))
-                    fields = self._route_fields()
-                    if destination_field is None and fields:
-                        destination_field = fields[-1]
-
-            if origin_field is None or destination_field is None:
-                self.diagnostic("route-inputs")
-                raise RuntimeError(
-                    f"Не нашёл поля маршрута Яндекс Go "
-                    f"(найдено редактируемых полей: {len(self._route_fields())})."
-                )
-
+            # Yandex Go 4.139.1 mobile renders route rows as clickable DIVs.
+            # The actual text input is mounted only after a route row is clicked.
+            origin_field = self._open_address_editor("from")
             self._replace_field(origin_field, origin)
-            # DOM can be rebuilt after selecting FROM, so resolve TO again.
-            destination_field = self._field_by_hint(
-                ("куда поедете", "куда", "пункт назначения")
-            ) or destination_field
+            time.sleep(0.8)
+
+            destination_field = self._open_address_editor("to")
             self._replace_field(destination_field, destination)
             self.log(f"Маршрут заполнен: {origin!r} -> {destination!r}")
             time.sleep(3)
