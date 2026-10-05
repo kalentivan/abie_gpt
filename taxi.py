@@ -151,35 +151,118 @@ class YandexTaxiSelenium:
                 pass
         return None
 
-    def _inputs(self):
+    def _route_fields(self):
         result = []
-        for selector in ("input", "textarea"):
+        seen = set()
+        selectors = (
+            "input",
+            "textarea",
+            '[role="textbox"]',
+            '[contenteditable="true"]',
+        )
+        for selector in selectors:
             try:
-                result.extend([x for x in self.driver.find_elements("css selector", selector) if x.is_displayed()])
+                for element in self.driver.find_elements("css selector", selector):
+                    if not element.is_displayed() or not element.is_enabled():
+                        continue
+                    key = element.id
+                    if key not in seen:
+                        seen.add(key)
+                        result.append(element)
             except Exception:
                 pass
         return result
+
+    def _field_by_hint(self, hints):
+        hints = tuple(x.casefold() for x in hints)
+        for field in self._route_fields():
+            attrs = " ".join(
+                str(field.get_attribute(name) or "")
+                for name in ("placeholder", "aria-label", "value", "textContent")
+            ).casefold()
+            if any(hint in attrs for hint in hints):
+                return field
+        return None
+
+    def _replace_field(self, field, value: str):
+        field.click()
+        time.sleep(0.2)
+        field.send_keys(Keys.CONTROL, "a")
+        field.send_keys(value)
+        time.sleep(1.2)
+        # Mobile Yandex Go shows address suggestions after typing.
+        # Prefer the first suggestion, but Enter also works when the field
+        # accepts the normalized address directly.
+        try:
+            field.send_keys(Keys.ARROW_DOWN)
+            field.send_keys(Keys.ENTER)
+        except Exception:
+            field.send_keys(Keys.ENTER)
+        time.sleep(1.2)
 
     def set_route(self, origin: str, destination: str):
         with self.lock:
             self.start()
             self.driver.get(TAXI_URL)
             time.sleep(2)
-            inputs = self._inputs()
-            if len(inputs) < 2:
+
+            origin_field = self._field_by_hint(
+                ("откуда", "адрес подачи", "место подачи", "улица")
+            )
+            destination_field = self._field_by_hint(
+                ("куда поедете", "куда", "пункт назначения")
+            )
+
+            fields = self._route_fields()
+            if origin_field is None and len(fields) >= 2:
+                origin_field = fields[0]
+            if destination_field is None:
+                candidates = [x for x in fields if origin_field is None or x.id != origin_field.id]
+                if candidates:
+                    destination_field = candidates[-1]
+
+            # In the current mobile Yandex Go page the pickup point may be a
+            # clickable row rather than an editable input. Click its visible
+            # text to switch it into edit mode and search again.
+            if origin_field is None:
+                pickup = self._visible([
+                    ("xpath", "//*[contains(normalize-space(.), 'улица') and not(self::body)]"),
+                    ("xpath", "//*[contains(normalize-space(.), 'Откуда') and not(self::body)]"),
+                ])
+                if pickup:
+                    pickup.click()
+                    time.sleep(0.5)
+                    origin_field = self._field_by_hint(("откуда", "адрес", "улица"))
+                    fields = self._route_fields()
+                    if origin_field is None and fields:
+                        origin_field = fields[0]
+
+            if destination_field is None:
+                destination = self._visible([
+                    ("xpath", "//*[normalize-space()='Куда поедете?']"),
+                    ("xpath", "//*[contains(normalize-space(.), 'Куда поедете') and not(self::body)]"),
+                ])
+                if destination:
+                    destination.click()
+                    time.sleep(0.5)
+                    destination_field = self._field_by_hint(("куда", "адрес"))
+                    fields = self._route_fields()
+                    if destination_field is None and fields:
+                        destination_field = fields[-1]
+
+            if origin_field is None or destination_field is None:
                 self.diagnostic("route-inputs")
-                raise RuntimeError("Не нашёл два поля адреса Яндекс Go. Диагностический скриншот сохранён.")
-            for field, value in zip(inputs[:2], (origin, destination)):
-                field.click()
-                try:
-                    field.send_keys(Keys.CONTROL, "a")
-                except Exception:
-                    pass
-                field.send_keys(value)
-                time.sleep(1)
-                field.send_keys(Keys.ARROW_DOWN)
-                field.send_keys(Keys.ENTER)
-                time.sleep(1)
+                raise RuntimeError(
+                    f"Не нашёл поля маршрута Яндекс Go "
+                    f"(найдено редактируемых полей: {len(self._route_fields())})."
+                )
+
+            self._replace_field(origin_field, origin)
+            # DOM can be rebuilt after selecting FROM, so resolve TO again.
+            destination_field = self._field_by_hint(
+                ("куда поедете", "куда", "пункт назначения")
+            ) or destination_field
+            self._replace_field(destination_field, destination)
             self.log(f"Маршрут заполнен: {origin!r} -> {destination!r}")
             time.sleep(3)
 
