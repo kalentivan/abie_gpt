@@ -1,4 +1,3 @@
-import os
 import shutil
 import tarfile
 import tempfile
@@ -8,11 +7,13 @@ from urllib.parse import unquote, urlparse
 
 import requests
 
-MEDIA_DIR = Path(os.getenv("MEDIA_DIR", "runtime/media")).resolve()
+from config import settings
+
+MEDIA_DIR = settings.media_dir.resolve()
 MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 AUDIO_SUFFIXES = {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav", ".webm"}
-MAX_EXTRACTED_FILES = int(os.getenv("MAX_EXTRACTED_FILES", "200"))
-MAX_EXTRACTED_BYTES = int(os.getenv("MAX_EXTRACTED_BYTES", str(512 * 1024 * 1024)))
+MAX_EXTRACTED_FILES = settings.max_extracted_files
+MAX_EXTRACTED_BYTES = settings.max_extracted_bytes
 
 
 def _plain(value):
@@ -78,7 +79,7 @@ def is_audio_file(path: Path) -> bool:
 
 def transcribe_audio(path: Path) -> str:
     from faster_whisper import WhisperModel
-    model = WhisperModel(os.getenv("WHISPER_MODEL", "small"), device="cpu", compute_type="int8")
+    model = WhisperModel(settings.whisper_model, device="cpu", compute_type="int8")
     segments, _ = model.transcribe(str(path), vad_filter=True)
     return " ".join(segment.text.strip() for segment in segments).strip()
 
