@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import threading
 import time
@@ -12,17 +11,14 @@ from seleniumbase import Driver
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import StaleElementReferenceException
 
-BRAVE_PATH = os.environ["BRAVE_PATH"]
-TAXI_PROFILE = Path(os.getenv("TAXI_PROFILE", "runtime/yandex-taxi-profile")).resolve()
-TAXI_ADDRESS_BOOK = Path(os.getenv("TAXI_ADDRESS_BOOK", "runtime/taxi-addresses.json")).resolve()
-TAXI_SCREENSHOT = Path(os.getenv("TAXI_SCREENSHOT", "runtime/taxi-screenshot.png")).resolve()
-TAXI_URL = os.getenv("TAXI_URL", "https://taxi.yandex.ru/")
+from config import settings
 
-LOW_END_MOBILE_UA = os.getenv(
-    "TAXI_MOBILE_USER_AGENT",
-    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-)
+BRAVE_PATH = settings.brave_path
+TAXI_PROFILE = settings.taxi_profile.resolve()
+TAXI_ADDRESS_BOOK = settings.taxi_address_book.resolve()
+TAXI_SCREENSHOT = settings.taxi_screenshot.resolve()
+TAXI_URL = settings.taxi_url
+LOW_END_MOBILE_UA = settings.taxi_mobile_user_agent
 
 
 @dataclass
