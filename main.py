@@ -60,6 +60,12 @@ async def message(event: MessageCreated):
             last_files = incoming
             await event.message.answer("Файл получен: " + ", ".join(p.name for p in incoming))
 
+        if text.casefold() in {"такси dom", "такси дом", "taxi dom"}:
+            paths = await asyncio.to_thread(taxi.provider.dump_dom)
+            await event.message.answer("Диагностика Яндекс Go готова.")
+            await send_files(event.message, paths)
+            return
+
         if text.casefold() in {"закажи такси", "такси", "вызови такси"}:
             answer = await asyncio.to_thread(taxi.start)
             await event.message.answer(answer)
