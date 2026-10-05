@@ -526,11 +526,49 @@ class YandexTaxiSelenium:
     def vehicle_summary(self) -> str:
         with self.lock:
             lines = [line.strip() for line in self.page_text().splitlines() if line.strip()]
-            interesting = []
-            for line in lines:
-                if re.search(r"\d{3}\s*[А-ЯA-Z]{2}|мин|водител|рейтинг", line, flags=re.I):
-                    interesting.append(line)
-            return "\n".join(interesting[-8:]) or "Машина назначена. Открой Яндекс Go для подробностей."
+            noise = re.compile(
+                r"^(?:стать водителем|водителям|©|\d+\s*мин)$",
+                flags=re.I,
+            )
+
+            # Prefer a compact slice around the car plate / driver assignment.
+            plate_re = re.compile(
+                r"(?:[А-ЯA-Z]\s?\d{3}\s?[А-ЯA-Z]{2}|\d{3}\s?[А-ЯA-Z]{2})",
+                flags=re.I,
+            )
+            plate_index = next(
+                (i for i, line in enumerate(lines) if plate_re.search(line)),
+                None,
+            )
+            if plate_index is not None:
+                start = max(0, plate_index - 8)
+                end = min(len(lines), plate_index + 9)
+                candidates = lines[start:end]
+            else:
+                # Yandex revisions sometimes render the plate without text that
+                # matches our regex. Keep vehicle/driver-looking lines instead.
+                keywords = re.compile(
+                    r"машин|автомоб|водител|рейтинг|цвет|номер|"
+                    r"lada|kia|hyundai|renault|volkswagen|skoda|toyota|"
+                    r"chery|geely|haval|moskvich|омода|лада|киа|хендай|"
+                    r"рено|фольксваген|шкода|тойота",
+                    flags=re.I,
+                )
+                candidates = [line for line in lines if keywords.search(line)]
+
+            result = []
+            for line in candidates:
+                if noise.search(line):
+                    continue
+                if line not in result:
+                    result.append(line)
+
+            if result:
+                return "\n".join(result[:12])
+
+            # Capture diagnostics instead of returning unrelated ETA/footer text.
+            self.diagnostic("vehicle")
+            return "Машина назначена, но данные автомобиля не удалось распознать."
 
     def dump_dom(self):
         with self.lock:
