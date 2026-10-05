@@ -71,7 +71,7 @@ class AddressBook:
         rows.append("Или: адрес откуда | адрес куда")
         return "\n".join(rows)
 
-    def resolve_route(self, text: str) -> tuple[str, str, list[Address]]:
+    def resolve_route(self, text: str) -> tuple[str, str, list[bool]]:
         value = text.strip()
         number_match = re.fullmatch(r"(\d+)\s+(\d+)", value)
         if number_match:
