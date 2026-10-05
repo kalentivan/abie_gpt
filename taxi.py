@@ -311,36 +311,56 @@ class YandexTaxiSelenium:
         return path
 
     def _open_address_editor(self, kind: str):
+        # Clicking either route row opens Yandex's search sheet. In that sheet
+        # there are two real textareas, explicitly distinguished by placeholder.
+        # Never choose a textbox by screen coordinates: the sheet is mounted at
+        # the top of the page, independently of the row that opened it.
         if kind == "from":
             selectors = [
                 ("css selector", ".address--UMqe0:not(.address_to--_yFAc)"),
                 ("xpath", "//*[contains(@class,'address--UMqe0') and not(contains(@class,'address_to--'))]"),
             ]
+            placeholder = "Откуда поедете?"
         else:
             selectors = [
                 ("css selector", ".address_to--_yFAc"),
                 ("xpath", "//*[normalize-space()='Куда поедете?']/ancestor::*[contains(@class,'address--UMqe0')][1]"),
             ]
+            placeholder = "Куда поедете?"
+
         row = self._visible(selectors)
         if not row:
             raise RuntimeError(f"Не нашёл строку адреса {kind}")
-        row_y = row.rect.get("y", 0)
-        row.click()
-        time.sleep(0.6)
+        try:
+            row.click()
+        except Exception:
+            self.driver.execute_script("arguments[0].click();", row)
+        time.sleep(0.5)
+
+        deadline = time.time() + 3
+        while time.time() < deadline:
+            try:
+                fields = [
+                    x for x in self.driver.find_elements(
+                        "css selector", f'textarea[placeholder="{placeholder}"]'
+                    )
+                    if x.is_displayed() and x.is_enabled()
+                ]
+                if fields:
+                    field = fields[0]
+                    self.log(
+                        f"Поле {kind}: placeholder={placeholder!r}; "
+                        f"value={field.get_attribute('value')!r}"
+                    )
+                    return field
+            except StaleElementReferenceException:
+                pass
+            time.sleep(0.1)
+
         self._dump_route_editor(kind)
-
-        fields = [
-            x for x in self._route_fields()
-            if (x.get_attribute("type") or "").lower() != "checkbox"
-        ]
-        if not fields:
-            self.diagnostic(f"address-editor-{kind}")
-            raise RuntimeError(f"После клика по адресу {kind} не появилось поле ввода")
-
-        # The mobile editor can expose more than one textbox. Select the one
-        # mounted at the vertical position of the row that was clicked.
-        fields.sort(key=lambda x: abs(x.rect.get("y", 0) - row_y))
-        return fields[0]
+        raise RuntimeError(
+            f"После клика по адресу {kind} не появилось поле {placeholder!r}"
+        )
 
     def route_values(self):
         from_row = self._visible([
