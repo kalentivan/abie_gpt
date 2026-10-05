@@ -1,4 +1,3 @@
-import os
 import re
 import shutil
 import stat
@@ -6,9 +5,10 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-REPO_URL = os.getenv("ABIE_REPO_URL", "https://github.com/kalentivan/abie.git")
-PROJECT_DIR = Path(__file__).resolve().parent
-SNAPSHOT_DIR = Path(os.getenv("ABIE_SNAPSHOT_DIR", str(PROJECT_DIR / "snapshots"))).resolve()
+from config import settings
+
+REPO_URL = settings.abie_repo_url
+SNAPSHOT_DIR = settings.abie_snapshot_dir.resolve()
 SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
 VERSION_BRANCHES = {
