@@ -90,19 +90,17 @@ class AddressBook:
         if not raw_left or not raw_right:
             raise ValueError("Нужны оба адреса: откуда | куда.")
 
-        created: list[Address] = []
-
-        def resolve(part: str) -> str:
+        def resolve(part: str) -> tuple[str, bool]:
             if part.isdigit():
                 item = self.get(int(part))
                 if not item:
                     raise ValueError(f"Адрес №{part} не найден.")
-                return item.address
-            item = self.add(part)
-            created.append(item)
-            return item.address
+                return item.address, True
+            return part, False
 
-        return resolve(raw_left), resolve(raw_right), created
+        left, left_known = resolve(raw_left)
+        right, right_known = resolve(raw_right)
+        return left, right, [left_known, right_known]
 
 
 class YandexTaxiSelenium:
@@ -184,71 +182,77 @@ class YandexTaxiSelenium:
                 return field
         return None
 
-    def _replace_field(self, field, value: str):
+    def _suggestions(self):
+        items = []
+        try:
+            titles = [
+                x for x in self.driver.find_elements(
+                    "css selector", "[class*='result-title--']"
+                ) if x.is_displayed()
+            ]
+        except Exception:
+            titles = []
+        for title in titles:
+            try:
+                container = title.find_element(
+                    "xpath", "./ancestor::*[contains(@class,'result--') or contains(@class,'suggest')][1]"
+                )
+                full = " ".join((container.text or "").split())
+            except Exception:
+                full = " ".join((title.text or "").split())
+            if full and full not in [x["text"] for x in items]:
+                items.append({"text": full, "element": title})
+        return items
+
+    @staticmethod
+    def _norm_address(value: str):
+        return re.sub(r"[^0-9a-zа-яё]+", " ", value.casefold()).strip()
+
+    def begin_address(self, kind: str, value: str):
+        field = self._open_address_editor(kind)
         field.click()
-        time.sleep(0.2)
         field.send_keys(Keys.CONTROL, "a")
         field.send_keys(value)
-        time.sleep(1.2)
+        time.sleep(1.3)
+        suggestions = self._suggestions()
+        if not suggestions:
+            self.diagnostic(f"suggestions-{kind}")
+            raise RuntimeError(f"Яндекс не предложил варианты для адреса: {value}")
+        rows = [x["text"] for x in suggestions]
+        wanted = self._norm_address(value)
+        exact = None
+        for i, row in enumerate(rows):
+            normalized = self._norm_address(row)
+            # Exact address text can have the city appended on the next line.
+            if normalized == wanted or normalized.startswith(wanted + " "):
+                if "краснодар" in normalized or "краснодар" not in " ".join(
+                    self._norm_address(x) for x in rows
+                ):
+                    exact = i
+                    break
+        preferred = next(
+            (i for i, row in enumerate(rows) if "краснодар" in self._norm_address(row)),
+            0,
+        )
+        return rows, exact, preferred
 
-        # Yandex Go mobile opens a full suggestion overlay. Keyboard Enter does
-        # not reliably select a result, so click a visible result explicitly.
-        suggestions = []
-        for selector in (
-            ".result-title--mo7xY",
-            "[class*='result-title--']",
-        ):
-            try:
-                suggestions = [
-                    x for x in self.driver.find_elements("css selector", selector)
-                    if x.is_displayed()
-                ]
-            except Exception:
-                suggestions = []
-            if suggestions:
-                break
-
-        if suggestions:
-            wanted = re.sub(r"[^0-9a-zа-яё]+", " ", value.casefold()).split()
-            best = suggestions[0]
-            best_score = -1
-            for item in suggestions:
-                text = (item.text or "").casefold()
-                score = sum(1 for token in wanted if token and token in text)
-                if score > best_score:
-                    best = item
-                    best_score = score
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});", best
-            )
-            time.sleep(0.2)
-            try:
-                best.click()
-            except Exception:
-                self.driver.execute_script("arguments[0].click();", best)
-            self.log(f"Выбрана подсказка адреса: {best.text!r}")
-        else:
-            # Fallback for another Yandex UI revision.
-            field.send_keys(Keys.ARROW_DOWN)
-            field.send_keys(Keys.ENTER)
-
-        # Wait until the suggestion overlay disappears before clicking the
-        # second route row; otherwise it intercepts the click.
+    def choose_suggestion(self, index: int):
+        suggestions = self._suggestions()
+        if not suggestions or index < 0 or index >= len(suggestions):
+            raise RuntimeError("Список подсказок Яндекса изменился. Повтори адрес.")
+        item = suggestions[index]
+        element = item["element"]
+        self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", element)
+        try:
+            element.click()
+        except Exception:
+            self.driver.execute_script("arguments[0].click();", element)
+        self.log(f"Выбрана подсказка адреса: {item['text']!r}")
         deadline = time.time() + 5
-        while time.time() < deadline:
-            try:
-                visible = [
-                    x for x in self.driver.find_elements(
-                        "css selector", "[class*='result-title--']"
-                    )
-                    if x.is_displayed()
-                ]
-            except Exception:
-                visible = []
-            if not visible:
-                break
+        while time.time() < deadline and self._suggestions():
             time.sleep(0.2)
-        time.sleep(0.5)
+        time.sleep(0.4)
+        return item["text"]
 
     def _open_address_editor(self, kind: str):
         if kind == "from":
@@ -274,22 +278,12 @@ class YandexTaxiSelenium:
             raise RuntimeError(f"После клика по адресу {kind} не появилось поле ввода")
         return visible_text[-1]
 
-    def set_route(self, origin: str, destination: str):
+    def prepare_route(self):
         with self.lock:
             self.start()
             self.driver.get(TAXI_URL)
             time.sleep(2)
 
-            # Yandex Go 4.139.1 mobile renders route rows as clickable DIVs.
-            # The actual text input is mounted only after a route row is clicked.
-            origin_field = self._open_address_editor("from")
-            self._replace_field(origin_field, origin)
-            time.sleep(0.8)
-
-            destination_field = self._open_address_editor("to")
-            self._replace_field(destination_field, destination)
-            self.log(f"Маршрут заполнен: {origin!r} -> {destination!r}")
-            time.sleep(3)
 
     def page_text(self) -> str:
         return self.driver.find_element("tag name", "body").text
@@ -405,42 +399,102 @@ class YandexTaxiSelenium:
 
 
 class TaxiAgent:
+    YES = {"да", "заказывай", "бери", "ок", "окей"}
+
     def __init__(self):
         self.book = AddressBook()
         self.provider = YandexTaxiSelenium()
         self.state = "IDLE"
-        self.route: tuple[str, str] | None = None
-        self.confirmed_price: int | None = None
+        self.route_parts = []
+        self.route_known = []
+        self.route_resolved = [None, None]
+        self.pending_index = None
+        self.pending_suggestions = []
+        self.pending_preferred = 0
+        self.confirmed_price = None
 
-    def is_active(self) -> bool:
+    def is_active(self):
         return self.state != "IDLE"
 
-    def start(self) -> str:
+    def start(self):
         self.state = "WAITING_ROUTE"
-        self.route = None
         self.confirmed_price = None
         return self.book.render()
 
-    def handle(self, text: str) -> str:
+    def _ask_address(self, index: int):
+        if self.route_known[index]:
+            self.route_resolved[index] = self.route_parts[index]
+            return self._advance_address(index + 1)
+
+        kind = "from" if index == 0 else "to"
+        rows, exact, preferred = self.provider.begin_address(kind, self.route_parts[index])
+        if exact is not None:
+            selected = self.provider.choose_suggestion(exact)
+            item = self.book.add(selected)
+            self.route_resolved[index] = item.address
+            return self._advance_address(index + 1)
+
+        self.pending_index = index
+        self.pending_suggestions = rows
+        self.pending_preferred = preferred
+        self.state = "WAITING_ADDRESS_CONFIRMATION"
+        label = "Откуда" if index == 0 else "Куда"
+        return f"{label}: Яндекс нашёл «{rows[preferred]}». Это правильный адрес?"
+
+    def _advance_address(self, index: int):
+        if index < 2:
+            return self._ask_address(index)
+        price, eta = self.provider.get_offer()
+        self.confirmed_price = price
+        self.state = "WAITING_CONFIRMATION"
+        return (
+            f"Маршрут: {self.route_resolved[0]} → {self.route_resolved[1]}\n"
+            f"Эконом — {price} ₽. Подача: {eta}.\nЗаказывать?"
+        )
+
+    def handle(self, text: str):
         value = text.strip()
+        folded = value.casefold()
+
         if self.state == "WAITING_ROUTE":
-            origin, destination, created = self.book.resolve_route(value)
-            self.route = (origin, destination)
-            self.provider.set_route(origin, destination)
-            price, eta = self.provider.get_offer()
-            self.confirmed_price = price
-            self.state = "WAITING_CONFIRMATION"
-            added = ""
-            if created:
-                unique = {item.id: item for item in created}
-                added = "\nСохранил: " + ", ".join(f"№{x.id} {x.address}" for x in unique.values())
-            return f"Эконом — {price} ₽. Подача: {eta}.{added}\nЗаказывать?"
+            origin, destination, known = self.book.resolve_route(value)
+            self.route_parts = [origin, destination]
+            self.route_known = known
+            self.route_resolved = [None, None]
+            self.provider.prepare_route()
+            return self._advance_address(0)
+
+        if self.state == "WAITING_ADDRESS_CONFIRMATION":
+            index = self.pending_index
+            if folded in self.YES:
+                selected = self.provider.choose_suggestion(self.pending_preferred)
+                item = self.book.add(selected)
+                self.route_resolved[index] = item.address
+                return self._advance_address(index + 1)
+            if folded in {"нет", "не"}:
+                self.state = "WAITING_ADDRESS_CHOICE"
+                rows = ["Выбери подходящий адрес:"]
+                rows.extend(f"{i + 1} — {x}" for i, x in enumerate(self.pending_suggestions))
+                return "\n".join(rows)
+            return "Ответь «Да» или «Нет»."
+
+        if self.state == "WAITING_ADDRESS_CHOICE":
+            if not value.isdigit():
+                return "Пришли номер адреса из списка."
+            choice = int(value) - 1
+            if choice < 0 or choice >= len(self.pending_suggestions):
+                return f"Выбери номер от 1 до {len(self.pending_suggestions)}."
+            selected = self.provider.choose_suggestion(choice)
+            item = self.book.add(selected)
+            index = self.pending_index
+            self.route_resolved[index] = item.address
+            return self._advance_address(index + 1)
 
         if self.state == "WAITING_CONFIRMATION":
-            if value.casefold() in {"нет", "не", "отмена", "отмени"}:
+            if folded in {"нет", "не", "отмена", "отмени"}:
                 self.state = "IDLE"
                 return "Заказ отменён."
-            if value.casefold() not in {"да", "заказывай", "бери", "ок", "окей"}:
+            if folded not in self.YES:
                 return "Ответь «Да», чтобы заказать, или «Нет», чтобы отменить."
             price, eta = self.provider.get_offer()
             if self.confirmed_price is not None and price > self.confirmed_price:
@@ -453,10 +507,13 @@ class TaxiAgent:
 
         return "Заказ уже отправлен. Напиши «где машина», чтобы проверить статус."
 
-    def status(self) -> str:
+    def status(self):
         if self.state == "IDLE":
             return "Активного заказа такси нет."
-        if self.state in {"WAITING_ROUTE", "WAITING_CONFIRMATION"}:
+        if self.state in {
+            "WAITING_ROUTE", "WAITING_ADDRESS_CONFIRMATION",
+            "WAITING_ADDRESS_CHOICE", "WAITING_CONFIRMATION"
+        }:
             return "Заказ ещё не создан."
         status = self.provider.order_status()
         self.state = status
@@ -470,3 +527,4 @@ class TaxiAgent:
 
     def close(self):
         self.provider.close()
+
