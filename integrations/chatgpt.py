@@ -1,4 +1,3 @@
-import os
 import shutil
 import time
 from pathlib import Path
@@ -8,11 +7,13 @@ import requests
 from seleniumbase import Driver
 from selenium.webdriver.common.keys import Keys
 
-BRAVE_PATH = os.environ["BRAVE_PATH"]
-BOT_PROFILE = os.environ["BOT_PROFILE"]
-SCREENSHOT_PATH = Path(os.environ["SCREENSHOT_PATH"])
-GPT_TIMEOUT = int(os.environ["GPT_TIMEOUT"])
-GPT_DOWNLOADS = Path(os.getenv("GPT_DOWNLOADS", "runtime/gpt-downloads")).resolve()
+from config import settings
+
+BRAVE_PATH = settings.brave_path
+BOT_PROFILE = str(settings.bot_profile)
+SCREENSHOT_PATH = settings.screenshot_path.resolve()
+GPT_TIMEOUT = settings.gpt_timeout
+GPT_DOWNLOADS = settings.gpt_downloads.resolve()
 GPT_DOWNLOADS.mkdir(parents=True, exist_ok=True)
 
 
