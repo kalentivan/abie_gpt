@@ -13,7 +13,8 @@ from maxapi.types import InputMedia, MessageCreated
 
 from handler import ChatGPTHandler
 from media import download_attachments, extract_archives, is_audio_file, transcribe_audio
-from repo_snapshot import create_repo_snapshot, parse_pull_command\nfrom taxi import TaxiAgent
+from repo_snapshot import create_repo_snapshot, parse_pull_command
+from taxi import TaxiAgent
 
 TOKEN = os.getenv("MAX_BOT_TOKEN")
 if not TOKEN:
