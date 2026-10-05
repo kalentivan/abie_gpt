@@ -25,6 +25,7 @@ dp = Dispatcher()
 gpt = ChatGPTHandler()
 taxi = TaxiAgent()
 last_files: list[Path] = []
+bot_mode = "GPT"  # GPT | TAXI
 
 
 async def send_files(message, paths: list[Path]) -> None:
@@ -60,7 +61,7 @@ async def monitor_taxi(message) -> None:
 
 @dp.message_created()
 async def message(event: MessageCreated):
-    global last_files
+    global last_files, bot_mode
     text = (event.message.body.text or "").strip()
     attachments = list(event.message.body.attachments or [])
 
@@ -69,6 +70,28 @@ async def message(event: MessageCreated):
         if incoming:
             last_files = incoming
             await event.message.answer("Файл получен: " + ", ".join(p.name for p in incoming))
+
+        folded = text.casefold()
+
+        if folded in {"режим gpt", "режим гпт", "gpt", "гпт"}:
+            bot_mode = "GPT"
+            await event.message.answer("Режим GPT включён.")
+            return
+
+        if folded in {"режим такси", "такси режим"}:
+            bot_mode = "TAXI"
+            await event.message.answer(
+                "Режим такси включён. Напиши «Закажи такси» или «Закажи такси 1 2»."
+            )
+            return
+
+        if folded in {"статус", "статус такси", "где машина", "когда машина"} and bot_mode == "TAXI":
+            path = await asyncio.to_thread(taxi.provider.diagnostic, "status")
+            await event.message.answer(
+                text=f"Статус такси: {taxi.state}. Текущий экран Яндекс Go:",
+                attachments=[InputMedia(path=str(path))],
+            )
+            return
 
         if text.casefold() in {"такси dom", "такси дом", "taxi dom"}:
             paths = await asyncio.to_thread(taxi.provider.dump_dom)
@@ -85,6 +108,7 @@ async def message(event: MessageCreated):
                 or text.casefold().startswith("вызови такси ")
             )
         ):
+            bot_mode = "TAXI"
             route = ""
             folded = text.casefold()
             for prefix in ("закажи такси", "вызови такси", "такси"):
@@ -100,16 +124,18 @@ async def message(event: MessageCreated):
             await event.message.answer(answer)
             return
 
-        if text.casefold() in {"где машина", "когда машина", "статус такси"}:
-            answer = await asyncio.to_thread(taxi.status)
-            await event.message.answer(answer)
-            return
-
-        if taxi.is_active() and not incoming:
+        if bot_mode == "TAXI" and taxi.is_active() and not incoming:
             answer = await asyncio.to_thread(taxi.handle, text)
             await event.message.answer(answer)
             if taxi.state == "ORDERING":
                 asyncio.create_task(monitor_taxi(event.message))
+            return
+
+        if bot_mode == "TAXI" and not incoming:
+            await event.message.answer(
+                "Сейчас включён режим такси. Команды: «Закажи такси», «Статус», "
+                "«Режим GPT»."
+            )
             return
 
         if text.upper() == "НД":
