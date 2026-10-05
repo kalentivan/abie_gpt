@@ -12,13 +12,6 @@ REPO_URL = settings.abie_repo_url
 SNAPSHOT_DIR = settings.abie_snapshot_dir.resolve()
 SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
-VERSION_BRANCHES = {
-    "v2": "v2-dev",
-    "2": "v2-dev",
-    "v3": "v3-dev",
-    "3": "v3-dev",
-}
-
 
 def parse_pull_command(text: str) -> str | None:
     match = re.fullmatch(r"(?i)\s*(?:ПУЛЛ|PULL)\s+([^\s]+)\s*", text or "")
@@ -26,8 +19,7 @@ def parse_pull_command(text: str) -> str | None:
 
 
 def _branch_for(version: str) -> str:
-    value = version.strip()
-    return VERSION_BRANCHES.get(value.lower(), value)
+    return version.strip()
 
 
 def _remove_readonly(func, path, exc_info):
