@@ -22,6 +22,7 @@ if not TOKEN:
 bot = Bot(TOKEN)
 dp = Dispatcher()
 gpt = ChatGPTHandler()
+taxi = TaxiAgent()
 last_files: list[Path] = []
 
 
@@ -147,6 +148,7 @@ async def main():
     try:
         await dp.start_polling(bot)
     finally:
+        await asyncio.to_thread(taxi.close)
         await asyncio.to_thread(gpt.close)
 
 
