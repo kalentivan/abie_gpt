@@ -291,16 +291,38 @@ class YandexTaxiSelenium:
     def get_offer(self) -> tuple[int, str]:
         with self.lock:
             text = self.page_text()
-            prices = re.findall(r"(?<!\d)(\d{2,6})\s*[₽РP](?!\w)", text, flags=re.I)
-            if not prices:
-                prices = re.findall(r"(?<!\d)(\d{2,6})\s*(?:руб\.?|RUB)(?!\w)", text, flags=re.I)
-            if not prices:
-                self.diagnostic("price")
-                raise RuntimeError("Не удалось прочитать цену со страницы Яндекс Go.")
-            price = int(prices[0])
+            if "Куда поедете?" in text:
+                self.diagnostic("route-not-ready")
+                raise RuntimeError("Яндекс Go ещё не принял пункт назначения; цену читать нельзя.")
+
+            # Read the Economy tariff card, not an arbitrary ₽ value from DOM.
+            economy = self._visible([
+                ("xpath", "//*[contains(normalize-space(.), 'Эконом') and contains(normalize-space(.), '₽')]"),
+            ])
+            if not economy:
+                self.diagnostic("economy-price")
+                raise RuntimeError("Не удалось найти рассчитанный тариф «Эконом».")
+
+            card_text = " ".join((economy.text or "").split())
+            match = re.search(r"(?:от\s*)?(\d{2,6})\s*₽", card_text, flags=re.I)
+            if not match:
+                # Some revisions put text in a child/ancestor tariff card.
+                try:
+                    card = economy.find_element(
+                        "xpath", "./ancestor::*[contains(@class,'tariff') or contains(@class,'class')][1]"
+                    )
+                    card_text = " ".join((card.text or "").split())
+                except Exception:
+                    pass
+                match = re.search(r"(?:от\s*)?(\d{2,6})\s*₽", card_text, flags=re.I)
+            if not match:
+                self.diagnostic("economy-price")
+                raise RuntimeError(f"Не удалось прочитать цену Эконом из: {card_text!r}")
+
+            price = int(match.group(1))
             eta_match = re.search(r"(?:через|подача[^\d]{0,20})(\d{1,3})\s*мин", text, flags=re.I)
             eta = f"~{eta_match.group(1)} мин" if eta_match else "не указана"
-            self.log(f"Цена: {price} ₽; подача: {eta}")
+            self.log(f"Эконом: {price} ₽; подача: {eta}; card={card_text!r}")
             return price, eta
 
     def create_order(self):
@@ -422,12 +444,16 @@ class TaxiAgent:
         return self.book.render()
 
     def _ask_address(self, index: int):
-        if self.route_known[index]:
-            self.route_resolved[index] = self.route_parts[index]
-            return self._advance_address(index + 1)
-
         kind = "from" if index == 0 else "to"
         rows, exact, preferred = self.provider.begin_address(kind, self.route_parts[index])
+
+        if self.route_known[index]:
+            # A saved address is trusted by the bot, but it still must be
+            # physically selected in the fresh Yandex Go page.
+            chosen = exact if exact is not None else preferred
+            selected = self.provider.choose_suggestion(chosen)
+            self.route_resolved[index] = selected
+            return self._advance_address(index + 1)
         if exact is not None:
             selected = self.provider.choose_suggestion(exact)
             item = self.book.add(selected)
