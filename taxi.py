@@ -318,6 +318,50 @@ class YandexTaxiSelenium:
                     interesting.append(line)
             return "\n".join(interesting[-8:]) or "Машина назначена. Открой Яндекс Go для подробностей."
 
+    def dump_dom(self):
+        with self.lock:
+            self.start()
+            out_dir = TAXI_SCREENSHOT.parent
+            out_dir.mkdir(parents=True, exist_ok=True)
+            html_path = out_dir / "yandex-taxi-page.html"
+            elements_path = out_dir / "yandex-taxi-elements.txt"
+
+            html_path.write_text(self.driver.page_source, encoding="utf-8")
+
+            selectors = "input, textarea, button, [role], [contenteditable], [data-testid]"
+            elements = self.driver.find_elements("css selector", selectors)
+            rows = [
+                f"url={self.driver.current_url}",
+                f"title={self.driver.title}",
+                f"elements={len(elements)}",
+                "",
+            ]
+            for index, element in enumerate(elements):
+                try:
+                    rows.extend([
+                        f"--- {index} ---",
+                        f"tag={element.tag_name}",
+                        f"displayed={element.is_displayed()}",
+                        f"enabled={element.is_enabled()}",
+                        f"text={element.text!r}",
+                        f"placeholder={element.get_attribute('placeholder')!r}",
+                        f"aria-label={element.get_attribute('aria-label')!r}",
+                        f"role={element.get_attribute('role')!r}",
+                        f"data-testid={element.get_attribute('data-testid')!r}",
+                        f"value={element.get_attribute('value')!r}",
+                        f"outerHTML={element.get_attribute('outerHTML')}",
+                        "",
+                    ])
+                except Exception as error:
+                    rows.extend([f"--- {index} ---", f"ERROR: {error}", ""])
+
+            elements_path.write_text("\n".join(rows), encoding="utf-8")
+            screenshot = self.diagnostic("dom")
+            self.log(
+                f"DOM dump: {html_path}; elements: {elements_path}; screenshot: {screenshot}"
+            )
+            return [html_path, elements_path, screenshot]
+
     def diagnostic(self, suffix: str):
         TAXI_SCREENSHOT.parent.mkdir(parents=True, exist_ok=True)
         path = TAXI_SCREENSHOT.with_name(f"{TAXI_SCREENSHOT.stem}-{suffix}{TAXI_SCREENSHOT.suffix}")
