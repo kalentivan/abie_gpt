@@ -123,8 +123,10 @@ class YandexTaxiSelenium:
                 binary_location=BRAVE_PATH,
                 user_data_dir=str(TAXI_PROFILE),
                 headless=False,
-                agent=LOW_END_MOBILE_UA,
-                chromium_arg="--window-size=412,915,--force-device-scale-factor=1",
+                chromium_arg=(
+                    f"--user-agent={LOW_END_MOBILE_UA},"
+                    "--window-size=412,915,--force-device-scale-factor=1"
+                ),
             )
             try:
                 self.driver.execute_cdp_cmd(
