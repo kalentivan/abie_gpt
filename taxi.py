@@ -268,15 +268,53 @@ class YandexTaxiSelenium:
         row = self._visible(selectors)
         if not row:
             raise RuntimeError(f"Не нашёл строку адреса {kind}")
+        row_y = row.rect.get("y", 0)
         row.click()
         time.sleep(0.6)
 
-        fields = self._route_fields()
-        visible_text = [x for x in fields if (x.get_attribute("type") or "").lower() != "checkbox"]
-        if not visible_text:
+        fields = [
+            x for x in self._route_fields()
+            if (x.get_attribute("type") or "").lower() != "checkbox"
+        ]
+        if not fields:
             self.diagnostic(f"address-editor-{kind}")
             raise RuntimeError(f"После клика по адресу {kind} не появилось поле ввода")
-        return visible_text[-1]
+
+        # The mobile editor can expose more than one textbox. Select the one
+        # mounted at the vertical position of the row that was clicked.
+        fields.sort(key=lambda x: abs(x.rect.get("y", 0) - row_y))
+        return fields[0]
+
+    def route_values(self):
+        from_row = self._visible([
+            ("css selector", ".address--UMqe0:not(.address_to--_yFAc)"),
+        ])
+        to_row = self._visible([
+            ("css selector", ".address_to--_yFAc"),
+        ])
+        return (
+            " ".join((from_row.text or "").split()) if from_row else "",
+            " ".join((to_row.text or "").split()) if to_row else "",
+        )
+
+    def verify_selected_address(self, kind: str, expected: str):
+        actual_from, actual_to = self.route_values()
+        actual = actual_from if kind == "from" else actual_to
+        expected_tokens = [
+            x for x in self._norm_address(expected).split()
+            if len(x) > 1 and x not in {"ул", "д"}
+        ]
+        actual_norm = self._norm_address(actual)
+        matched = sum(1 for x in expected_tokens if x in actual_norm)
+        needed = max(1, min(2, len(expected_tokens)))
+        if matched < needed:
+            self.diagnostic(f"verify-{kind}")
+            raise RuntimeError(
+                f"Яндекс не установил адрес {kind}: ожидали {expected!r}, "
+                f"на странице {actual!r}. FROM={actual_from!r}; TO={actual_to!r}"
+            )
+        self.log(f"Проверен адрес {kind}: {actual!r}")
+        return actual
 
     def prepare_route(self):
         with self.lock:
@@ -452,10 +490,12 @@ class TaxiAgent:
             # physically selected in the fresh Yandex Go page.
             chosen = exact if exact is not None else preferred
             selected = self.provider.choose_suggestion(chosen)
+            selected = self.provider.verify_selected_address(kind, selected)
             self.route_resolved[index] = selected
             return self._advance_address(index + 1)
         if exact is not None:
             selected = self.provider.choose_suggestion(exact)
+            selected = self.provider.verify_selected_address(kind, selected)
             item = self.book.add(selected)
             self.route_resolved[index] = item.address
             return self._advance_address(index + 1)
@@ -496,6 +536,8 @@ class TaxiAgent:
             index = self.pending_index
             if folded in self.YES:
                 selected = self.provider.choose_suggestion(self.pending_preferred)
+                kind = "from" if index == 0 else "to"
+                selected = self.provider.verify_selected_address(kind, selected)
                 item = self.book.add(selected)
                 self.route_resolved[index] = item.address
                 return self._advance_address(index + 1)
@@ -513,8 +555,10 @@ class TaxiAgent:
             if choice < 0 or choice >= len(self.pending_suggestions):
                 return f"Выбери номер от 1 до {len(self.pending_suggestions)}."
             selected = self.provider.choose_suggestion(choice)
-            item = self.book.add(selected)
             index = self.pending_index
+            kind = "from" if index == 0 else "to"
+            selected = self.provider.verify_selected_address(kind, selected)
+            item = self.book.add(selected)
             self.route_resolved[index] = item.address
             return self._advance_address(index + 1)
 
