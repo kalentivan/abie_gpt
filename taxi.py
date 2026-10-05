@@ -350,6 +350,10 @@ class YandexTaxiSelenium:
         row = self._visible(selectors)
         if not row:
             raise RuntimeError(f"Не нашёл строку адреса {kind}")
+
+        # After selecting FROM, Yandex can keep the search sheet open with the
+        # FROM textarea still focused. For TO, clicking the row is not enough in
+        # that state: explicitly focus the destination textarea after opening.
         try:
             row.click()
         except Exception:
@@ -367,11 +371,26 @@ class YandexTaxiSelenium:
                 ]
                 if fields:
                     field = fields[0]
+                    # Force focus onto the exact textarea. This matters for TO:
+                    # Yandex may leave FROM focused after selecting its suggestion.
+                    self.driver.execute_script("arguments[0].focus(); arguments[0].click();", field)
+                    time.sleep(0.1)
+                    active = self.driver.switch_to.active_element
+                    active_placeholder = active.get_attribute("placeholder")
+                    if active_placeholder != placeholder:
+                        field.click()
+                        active = self.driver.switch_to.active_element
+                        active_placeholder = active.get_attribute("placeholder")
+                    if active_placeholder != placeholder:
+                        raise RuntimeError(
+                            f"Не удалось активировать поле {kind}: "
+                            f"active placeholder={active_placeholder!r}"
+                        )
                     self.log(
                         f"Поле {kind}: placeholder={placeholder!r}; "
-                        f"value={field.get_attribute('value')!r}"
+                        f"value={field.get_attribute('value')!r}; active={active_placeholder!r}"
                     )
-                    return field
+                    return active
             except StaleElementReferenceException:
                 pass
             time.sleep(0.1)
