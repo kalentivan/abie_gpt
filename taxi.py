@@ -236,10 +236,30 @@ class YandexTaxiSelenium:
             field,
         )
         time.sleep(0.15)
-        field = self._field_by_hint(
-            ("Откуда поедете?",) if kind == "from" else ("Куда поедете?",)
-        ) or field
-        field.send_keys(value)
+
+        # Do NOT use _field_by_hint here: its fuzzy matching can return the
+        # other route textarea. Re-acquire the exact field by placeholder after
+        # React processes the clear event, then verify focus once more.
+        placeholder = "Откуда поедете?" if kind == "from" else "Куда поедете?"
+        exact_fields = [
+            x for x in self.driver.find_elements(
+                "css selector", f'textarea[placeholder="{placeholder}"]'
+            )
+            if x.is_displayed() and x.is_enabled()
+        ]
+        if not exact_fields:
+            self._dump_route_editor(kind)
+            raise RuntimeError(f"После очистки исчезло поле {placeholder!r}")
+        field = exact_fields[0]
+        self.driver.execute_script("arguments[0].focus();", field)
+        active = self.driver.switch_to.active_element
+        if active.get_attribute("placeholder") != placeholder:
+            raise RuntimeError(
+                f"Перед вводом {kind} активно не то поле: "
+                f"{active.get_attribute('placeholder')!r}"
+            )
+        active.send_keys(value)
+        self.log(f"Введён {kind}: {value!r} в {placeholder!r}")
         time.sleep(1.3)
         suggestions = self._suggestions()
         if not suggestions:
