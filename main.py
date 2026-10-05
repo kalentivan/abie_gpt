@@ -7,6 +7,7 @@ from maxapi import Bot, Dispatcher
 from maxapi.types import InputMedia, MessageCreated
 
 from config import settings
+from config import settings
 from integrations.chatgpt import ChatGPTHandler
 from utils.media import download_attachments, extract_archives, is_audio_file, transcribe_audio
 from utils.repo_snapshot import create_repo_snapshot, parse_pull_command
