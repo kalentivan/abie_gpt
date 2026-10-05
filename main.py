@@ -33,14 +33,24 @@ async def send_files(message, paths: list[Path]) -> None:
 
 
 async def monitor_taxi(message) -> None:
-    last_status = None
+    last_state = None
+    screenshot_sent = False
     while taxi.state in {"ORDERING", "SEARCHING_CAR", "CAR_ASSIGNED"}:
         await asyncio.sleep(10)
         try:
-            status = await asyncio.to_thread(taxi.status)
-            if status != last_status:
-                await message.answer(status)
-                last_status = status
+            await asyncio.to_thread(taxi.status)
+            if taxi.state != last_state:
+                if taxi.state == "SEARCHING_CAR":
+                    await message.answer("Яндекс ещё ищет машину.")
+                elif taxi.state == "CAR_ASSIGNED" and not screenshot_sent:
+                    path = await asyncio.to_thread(taxi.provider.diagnostic, "car-assigned")
+                    await message.answer(
+                        text="Машина найдена — вот экран заказа.",
+                        attachments=[InputMedia(path=str(path))],
+                    )
+                    screenshot_sent = True
+                    return
+                last_state = taxi.state
             if taxi.state == "ARRIVED":
                 return
         except Exception as error:
