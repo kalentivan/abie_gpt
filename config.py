@@ -86,6 +86,16 @@ class Settings(BaseSettings):
     loki_url: str = Field(default="", alias="LOKI_URL")
     loki_timeout: int = Field(default=120, alias="LOKI_TIMEOUT")
 
+    server_command_timeout: int = Field(default=120, alias="SERVER_COMMAND_TIMEOUT")
+    server_output_dir: Path = Field(
+        default=Path("runtime/server"),
+        alias="SERVER_OUTPUT_DIR",
+    )
+    server_max_output_bytes: int = Field(
+        default=32 * 1024 * 1024,
+        alias="SERVER_MAX_OUTPUT_BYTES",
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
