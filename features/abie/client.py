@@ -78,6 +78,17 @@ class AbieHttpExecutor:
             max_size = settings.abie_max_response_bytes
 
             with target.open("wb") as output:
+                if extension == ".txt":
+                    header = (
+                        f"Timestamp: {datetime.now().astimezone().isoformat()}\n"
+                        f"Target: {command.target}\n"
+                        f"Method: {command.method}\n"
+                        f"Path: {command.path}\n"
+                        f"Status: {response.status_code}\n"
+                        f"Content-Type: {content_type}\n"
+                        f"\n--- RESPONSE ---\n\n"
+                    ).encode("utf-8")
+                    output.write(header)
                 for chunk in response.iter_content(chunk_size=64 * 1024):
                     if not chunk:
                         continue
