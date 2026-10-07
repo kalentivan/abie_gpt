@@ -1,3 +1,4 @@
+from .server import ServerCommandExecutor, ServerResult
 from .client import AbieHttpExecutor
 from .commands import (
     CONTINUE_MARKER,
@@ -8,6 +9,8 @@ from .commands import (
 
 __all__ = [
     "AbieHttpExecutor",
+    "ServerCommandExecutor",
+    "ServerResult",
     "CONTINUE_MARKER",
     "REQUEST_PROMPT",
     "ParsedCommand",
