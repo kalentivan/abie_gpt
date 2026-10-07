@@ -1,5 +1,6 @@
 import shutil
 import time
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -8,6 +9,7 @@ from seleniumbase import Driver
 from selenium.webdriver.common.keys import Keys
 
 from config import settings
+from integrations.dialogs import DialogRegistry
 
 BRAVE_PATH = settings.brave_path
 BOT_PROFILE = str(settings.bot_profile)
@@ -15,11 +17,13 @@ SCREENSHOT_PATH = settings.screenshot_path.resolve()
 GPT_TIMEOUT = settings.gpt_timeout
 GPT_DOWNLOADS = settings.gpt_downloads.resolve()
 GPT_DOWNLOADS.mkdir(parents=True, exist_ok=True)
+GPT_DIALOGS = settings.gpt_dialogs.resolve()
 
 
 class ChatGPTHandler:
     def __init__(self):
         self.driver = None
+        self.dialogs = DialogRegistry(GPT_DIALOGS)
 
     def log(self, message):
         print(f"[GPT] {message}", flush=True)
@@ -37,8 +41,12 @@ class ChatGPTHandler:
         )
 
         self.log("Brave запущен")
-        self.driver.get("https://chatgpt.com/")
+        active = self.dialogs.active()
+        start_url = active["url"] if active else "https://chatgpt.com/"
+        self.driver.get(start_url)
         self.log(f"Страница открыта: {self.driver.current_url}")
+        if active:
+            self.log(f"Восстановлен диалог: {active['title']}")
 
         self.find_input_box()
         self.log("Поле ввода найдено")
@@ -302,6 +310,7 @@ class ChatGPTHandler:
         answer = self._wait_answer(before)
 
         self.log(f"URL после ответа: {self.driver.current_url}")
+        self.dialogs.touch_active(self.driver.current_url)
         self.log(f"Получен ответ: {answer[:300]!r}")
         self.log("=" * 50)
 
@@ -364,11 +373,41 @@ class ChatGPTHandler:
         self.log("Не удалось безопасно выделить ответ из текста страницы")
         return None
 
-    def new_dialog(self):
-        self.log("Открываю новый диалог...")
+    def _dialog_title(self, requested=None):
+        requested = (requested or "").strip()
+        base = requested or datetime.now().strftime("Диалог %Y-%m-%d %H:%M")
+        existing = {item["title"].casefold() for item in self.dialogs.list()}
+        if base.casefold() not in existing:
+            return base
+        index = 2
+        while f"{base} ({index})".casefold() in existing:
+            index += 1
+        return f"{base} ({index})"
+
+    def new_dialog(self, title=None):
+        title = self._dialog_title(title)
+        self.log(f"Создаю новый диалог: {title}")
         self.driver.get("https://chatgpt.com/")
         self.find_input_box()
-        self.log(f"Новый диалог открыт: {self.driver.current_url}")
+
+        # ChatGPT assigns /c/<id> only after the first message. Send a harmless
+        # seed automatically so the conversation can be persisted immediately.
+        self.send("Привет")
+        url = self.driver.current_url
+        item = self.dialogs.remember(title, url)
+        self.log(f"Новый диалог сохранён: {title} -> {url}")
+        return item
+
+    def list_dialogs(self):
+        return self.dialogs.list()
+
+    def switch_dialog(self, selector):
+        item = self.dialogs.select(selector)
+        self.log(f"Переключаю диалог: {item['title']} -> {item['url']}")
+        self.driver.get(item["url"])
+        self.find_input_box()
+        self.log(f"Диалог открыт: {item['title']}")
+        return item
 
     def screenshot(self):
         self.driver.save_screenshot(str(SCREENSHOT_PATH))
