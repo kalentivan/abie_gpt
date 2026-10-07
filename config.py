@@ -66,7 +66,6 @@ class Settings(BaseSettings):
 
     # Direct HTTP access to the running ABIE installation.
     abie_api_url: str = Field(default="", alias="ABIE_API_URL")
-    abie_api_token: str = Field(default="", alias="ABIE_API_TOKEN")
     abie_api_timeout: int = Field(default=120, alias="ABIE_API_TIMEOUT")
     abie_openapi_path: str = Field(default="", alias="ABIE_OPENAPI_PATH")
     abie_http_output_dir: Path = Field(
@@ -81,7 +80,6 @@ class Settings(BaseSettings):
 
     # Loki may be exposed separately from the ABIE API.
     loki_url: str = Field(default="", alias="LOKI_URL")
-    loki_token: str = Field(default="", alias="LOKI_TOKEN")
     loki_timeout: int = Field(default=120, alias="LOKI_TIMEOUT")
 
 
