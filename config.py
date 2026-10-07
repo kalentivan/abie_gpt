@@ -25,6 +25,10 @@ class Settings(BaseSettings):
         default=Path("runtime/gpt-downloads"),
         alias="GPT_DOWNLOADS",
     )
+    gpt_dialogs: Path = Field(
+        default=Path("runtime/gpt-dialogs.json"),
+        alias="GPT_DIALOGS",
+    )
 
     taxi_profile: Path = Field(
         default=Path("runtime/yandex-taxi-profile"),
