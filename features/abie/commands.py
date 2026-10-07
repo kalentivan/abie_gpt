@@ -16,6 +16,21 @@ ABIE PUT <relative-path> <json-body>
 ABIE PATCH <relative-path> <json-body>
 ABIE DELETE <relative-path>
 LOKI GET <relative-path>
+SERVER RUN <command-name> [key=value ...]
+
+SERVER выполняет только команду из разрешённого словаря.
+Доступные команды:
+pods
+services
+deployments
+events
+nodes
+pod-logs namespace=<ns> pod=<pod> tail=<1..10000>
+pod-logs-previous namespace=<ns> pod=<pod> tail=<1..10000>
+pod-describe namespace=<ns> pod=<pod>
+deployment-describe namespace=<ns> deployment=<name>
+kind-clusters
+abie-services
 
 ABIE и LOKI принимают только относительный path, начиная с /.
 Query-параметры передавай прямо в path.
@@ -34,6 +49,7 @@ class ParsedCommand:
     method: str
     path: str
     body: Any | None
+    args: dict[str, str] | None
     continue_work: bool
     raw_command: str
 
@@ -60,6 +76,29 @@ def parse_command(text: str) -> ParsedCommand | None:
 
     target = parts[0].upper()
     method = parts[1].upper()
+
+    if target == "SERVER":
+        if method != "RUN":
+            return None
+        name = parts[2]
+        args = {}
+        for token in parts[3:]:
+            if "=" not in token:
+                return None
+            key, value = token.split("=", 1)
+            if not key or not value or key in args:
+                return None
+            args[key] = value
+        return ParsedCommand(
+            target=target,
+            method=method,
+            path=name,
+            body=None,
+            args=args,
+            continue_work=continue_work,
+            raw_command=command_text,
+        )
+
     if target not in {"ABIE", "LOKI"} or method not in _ALLOWED_METHODS:
         return None
 
@@ -86,6 +125,7 @@ def parse_command(text: str) -> ParsedCommand | None:
         method=method,
         path=path,
         body=body,
+        args=None,
         continue_work=continue_work,
         raw_command=command_text,
     )
