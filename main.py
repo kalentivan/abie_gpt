@@ -240,9 +240,34 @@ async def message(event: MessageCreated):
             )
             return
 
-        if text.upper() == "НД":
-            await asyncio.to_thread(gpt.new_dialog)
-            await event.message.answer("Новый диалог открыт.")
+        if text.upper() == "НД" or text.upper().startswith("НД "):
+            title = text[2:].strip() or None
+            item = await asyncio.to_thread(gpt.new_dialog, title)
+            await event.message.answer(
+                f"Новый диалог создан и сохранён: {item['title']}\n{item['url']}"
+            )
+            return
+
+        if folded in {"диалоги", "список диалогов"}:
+            items = await asyncio.to_thread(gpt.list_dialogs)
+            if not items:
+                await event.message.answer("Сохранённых диалогов пока нет.")
+                return
+            lines = ["Диалоги ChatGPT:"]
+            for index, item in enumerate(items, 1):
+                marker = " ← текущий" if item.get("active") else ""
+                lines.append(
+                    f"{index}. {item['title']}{marker}\n{item['url']}"
+                )
+            await send_text(event.message, "\n".join(lines))
+            return
+
+        if folded.startswith("диалог "):
+            selector = text.split(maxsplit=1)[1].strip()
+            item = await asyncio.to_thread(gpt.switch_dialog, selector)
+            await event.message.answer(
+                f"Переключился на диалог: {item['title']}\n{item['url']}"
+            )
             return
 
         if text.upper() == "СШ":
@@ -324,7 +349,7 @@ async def main():
         print(f"maxapi diagnostics failed: {error}")
     await asyncio.to_thread(gpt.start)
     print("MAX <-> ChatGPT запущен")
-    print("НД = новый диалог | СШ = скриншот | ПУЛЛ <ветка> = snapshot ABIE -> ChatGPT | РАСПАКУЙ = извлечь архив | Закажи такси | Выполни запрос | ABIE API | СТОП")
+    print("НД [название] = новый диалог | ДИАЛОГИ = список | ДИАЛОГ <номер/название> = переключить | СШ = скриншот | ПУЛЛ <ветка> = snapshot ABIE -> ChatGPT | РАСПАКУЙ = извлечь архив | Закажи такси | Выполни запрос | ABIE API | СТОП")
     try:
         await dp.start_polling(bot)
     finally:
