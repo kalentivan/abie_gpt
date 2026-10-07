@@ -64,6 +64,26 @@ class Settings(BaseSettings):
         alias="ABIE_SNAPSHOT_DIR",
     )
 
+    # Direct HTTP access to the running ABIE installation.
+    abie_api_url: str = Field(default="", alias="ABIE_API_URL")
+    abie_api_token: str = Field(default="", alias="ABIE_API_TOKEN")
+    abie_api_timeout: int = Field(default=120, alias="ABIE_API_TIMEOUT")
+    abie_openapi_path: str = Field(default="", alias="ABIE_OPENAPI_PATH")
+    abie_http_output_dir: Path = Field(
+        default=Path("runtime/abie-http"),
+        alias="ABIE_HTTP_OUTPUT_DIR",
+    )
+    abie_max_response_bytes: int = Field(
+        default=256 * 1024 * 1024,
+        alias="ABIE_MAX_RESPONSE_BYTES",
+    )
+    abie_max_request_chain: int = Field(default=100, alias="ABIE_MAX_REQUEST_CHAIN")
+
+    # Loki may be exposed separately from the ABIE API.
+    loki_url: str = Field(default="", alias="LOKI_URL")
+    loki_token: str = Field(default="", alias="LOKI_TOKEN")
+    loki_timeout: int = Field(default=120, alias="LOKI_TIMEOUT")
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
