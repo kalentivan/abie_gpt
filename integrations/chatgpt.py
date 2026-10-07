@@ -37,6 +37,10 @@ class ChatGPTHandler:
             browser="chrome",
             binary_location=BRAVE_PATH,
             user_data_dir=BOT_PROFILE,
+            # SeleniumBase automatically switches Linux sessions to headless
+            # when it thinks no desktop is available. This bot intentionally
+            # drives the user's visible Brave session, so force headed mode.
+            headed=True,
             headless=False,
         )
 
