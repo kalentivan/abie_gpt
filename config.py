@@ -91,6 +91,10 @@ class Settings(BaseSettings):
         default=Path("runtime/server"),
         alias="SERVER_OUTPUT_DIR",
     )
+    server_command_registry: Path = Field(
+        default=Path("runtime/server-commands.json"),
+        alias="SERVER_COMMAND_REGISTRY",
+    )
     server_max_output_bytes: int = Field(
         default=32 * 1024 * 1024,
         alias="SERVER_MAX_OUTPUT_BYTES",
