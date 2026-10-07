@@ -7,6 +7,7 @@ from maxapi import Bot, Dispatcher
 from maxapi.types import InputMedia, MessageCreated
 
 from config import settings
+from features.abie import AbieHttpExecutor, REQUEST_PROMPT, parse_command
 from integrations.chatgpt import ChatGPTHandler
 from utils.media import download_attachments, extract_archives, is_audio_file, transcribe_audio
 from utils.repo_snapshot import create_repo_snapshot, parse_pull_command
@@ -16,13 +17,87 @@ bot = Bot(settings.max_bot_token)
 dp = Dispatcher()
 gpt = ChatGPTHandler()
 taxi = TaxiAgent()
+abie_http = AbieHttpExecutor()
 last_files: list[Path] = []
 bot_mode = "GPT"  # GPT | TAXI
+abie_stop_requested = False
 
 
 async def send_files(message, paths: list[Path]) -> None:
     for path in paths:
         await message.answer(text=path.name, attachments=[InputMedia(path=str(path))])
+
+
+async def send_text(message, value: str) -> None:
+    for i in range(0, len(value), 3900):
+        await message.answer(value[i:i + 3900])
+
+
+async def execute_abie_request(message, command):
+    await message.answer(f"🔧 {command.target}\n{command.raw_command}")
+    result = await asyncio.to_thread(abie_http.execute, command)
+    await message.answer(
+        text=(
+            f"HTTP {result.status_code} · {result.size} bytes · "
+            f"{result.duration_seconds:.2f}s\n"
+            f"Результат: {result.file_path.name}"
+        ),
+        attachments=[InputMedia(path=str(result.file_path))],
+    )
+    return result
+
+
+async def run_abie_dialog(message) -> None:
+    global abie_stop_requested
+    abie_stop_requested = False
+
+    answer, outgoing = await asyncio.to_thread(gpt.send_with_files, REQUEST_PROMPT, [])
+    if outgoing:
+        await send_files(message, outgoing)
+
+    steps = 0
+    while True:
+        if abie_stop_requested:
+            await message.answer("ABIE: цепочка остановлена. Возвращаюсь в ручной режим.")
+            return
+
+        command = parse_command(answer)
+        if command is None:
+            await send_text(message, answer)
+            return
+
+        steps += 1
+        if steps > settings.abie_max_request_chain:
+            await message.answer(
+                f"ABIE: достигнут предохранительный лимит "
+                f"{settings.abie_max_request_chain} запросов. Цепочка остановлена."
+            )
+            return
+
+        result = await execute_abie_request(message, command)
+
+        result_prompt = (
+            "Результат выполненного HTTP-запроса приложен файлом. "
+            f"Команда: {command.raw_command}. HTTP status: {result.status_code}. "
+            f"Размер payload: {result.size} bytes. "
+            "Проанализируй результат. Если нужен следующий запрос и ранее была "
+            "согласована автоматическая цепочка, ответь только следующей машинной "
+            "командой и добавь последней строкой «ПРОДОЛЖАЕМ РАБОТУ». "
+            "Если запросов больше не нужно, дай обычный ответ пользователю."
+        )
+        answer, outgoing = await asyncio.to_thread(
+            gpt.send_with_files,
+            result_prompt,
+            [result.file_path],
+        )
+        if outgoing:
+            await send_files(message, outgoing)
+
+        # A request is followed automatically only when the command that was
+        # just executed explicitly carried the continuation marker.
+        if not command.continue_work:
+            await send_text(message, answer)
+            return
 
 
 async def monitor_taxi(message) -> None:
@@ -53,7 +128,7 @@ async def monitor_taxi(message) -> None:
 
 @dp.message_created()
 async def message(event: MessageCreated):
-    global last_files, bot_mode
+    global last_files, bot_mode, abie_stop_requested
     text = (event.message.body.text or "").strip()
     attachments = list(event.message.body.attachments or [])
 
@@ -64,6 +139,41 @@ async def message(event: MessageCreated):
             await event.message.answer("Файл получен: " + ", ".join(p.name for p in incoming))
 
         folded = text.casefold()
+
+        if folded in {"стоп", "stop"}:
+            abie_stop_requested = True
+            await event.message.answer("СТОП принят. Автоматическая цепочка ABIE остановлена.")
+            try:
+                await asyncio.to_thread(
+                    gpt.send,
+                    "Пользователь отправил СТОП. Не отправляй следующие HTTP-запросы; "
+                    "переходим в ручной режим.",
+                )
+            except Exception:
+                traceback.print_exc()
+            return
+
+        if folded in {"выполни запрос", "выполнить запрос"}:
+            await event.message.answer("ABIE: запрашиваю у ChatGPT машинную HTTP-команду.")
+            await run_abie_dialog(event.message)
+            return
+
+        if folded in {"abie api", "аби api", "abie openapi", "аби openapi"}:
+            command = abie_http.openapi_command()
+            result = await execute_abie_request(event.message, command)
+            answer, outgoing = await asyncio.to_thread(
+                gpt.send_with_files,
+                (
+                    "Актуальный OpenAPI bundle работающей ABIE приложен. "
+                    "Используй его как источник истины для доступных HTTP API, "
+                    "методов и аргументов при следующих диагностических запросах."
+                ),
+                [result.file_path],
+            )
+            await send_text(event.message, answer)
+            if outgoing:
+                await send_files(event.message, outgoing)
+            return
 
         if folded in {"режим gpt", "режим гпт", "gpt", "гпт"}:
             bot_mode = "GPT"
@@ -161,8 +271,7 @@ async def message(event: MessageCreated):
             prompt = f"ПУЛЛ {pull_version}: свежий snapshot ABIE ветки {branch}, commit {commit}. Архив приложен."
             answer, outgoing = await asyncio.to_thread(gpt.send_with_files, prompt, [archive])
             await event.message.answer("ПУЛЛ: ChatGPT ответил. Отправляю ответ в MAX.")
-            for i in range(0, len(answer), 3900):
-                await event.message.answer(answer[i:i + 3900])
+            await send_text(event.message, answer)
             if outgoing:
                 await send_files(event.message, outgoing)
             return
@@ -197,8 +306,7 @@ async def message(event: MessageCreated):
             files_for_gpt,
         )
 
-        for i in range(0, len(answer), 3900):
-            await event.message.answer(answer[i:i + 3900])
+        await send_text(event.message, answer)
         if outgoing:
             await send_files(event.message, outgoing)
 
@@ -216,7 +324,7 @@ async def main():
         print(f"maxapi diagnostics failed: {error}")
     await asyncio.to_thread(gpt.start)
     print("MAX <-> ChatGPT запущен")
-    print("НД = новый диалог | СШ = скриншот | ПУЛЛ <ветка> = snapshot ABIE -> ChatGPT | РАСПАКУЙ = извлечь архив | Закажи такси")
+    print("НД = новый диалог | СШ = скриншот | ПУЛЛ <ветка> = snapshot ABIE -> ChatGPT | РАСПАКУЙ = извлечь архив | Закажи такси | Выполни запрос | ABIE API | СТОП")
     try:
         await dp.start_polling(bot)
     finally:
