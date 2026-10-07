@@ -7,7 +7,7 @@ from maxapi import Bot, Dispatcher
 from maxapi.types import InputMedia, MessageCreated
 
 from config import settings
-from features.abie import AbieHttpExecutor, REQUEST_PROMPT, parse_command
+from features.abie import AbieHttpExecutor, REQUEST_PROMPT, ServerCommandExecutor, parse_command
 from integrations.chatgpt import ChatGPTHandler
 from utils.media import download_attachments, extract_archives, is_audio_file, transcribe_audio
 from utils.repo_snapshot import create_repo_snapshot, parse_pull_command
@@ -18,6 +18,11 @@ dp = Dispatcher()
 gpt = ChatGPTHandler()
 taxi = TaxiAgent()
 abie_http = AbieHttpExecutor()
+server_commands = ServerCommandExecutor(
+    settings.server_output_dir,
+    timeout=settings.server_command_timeout,
+    max_bytes=settings.server_max_output_bytes,
+)
 last_files: list[Path] = []
 bot_mode = "GPT"  # GPT | TAXI
 abie_stop_requested = False
@@ -35,6 +40,23 @@ async def send_text(message, value: str) -> None:
 
 async def execute_abie_request(message, command):
     await message.answer(f"🔧 {command.target}\n{command.raw_command}")
+
+    if command.target == "SERVER":
+        result = await asyncio.to_thread(
+            server_commands.execute,
+            command.path,
+            command.args or {},
+        )
+        await message.answer(
+            text=(
+                f"SERVER exit {result.return_code} · {result.size} bytes · "
+                f"{result.duration_seconds:.2f}s\n"
+                f"Результат: {result.file_path.name}"
+            ),
+            attachments=[InputMedia(path=str(result.file_path))],
+        )
+        return result
+
     result = await asyncio.to_thread(abie_http.execute, command)
     await message.answer(
         text=(
@@ -76,9 +98,14 @@ async def run_abie_dialog(message) -> None:
 
         result = await execute_abie_request(message, command)
 
+        status_text = (
+            f"SERVER exit code: {result.return_code}"
+            if command.target == "SERVER"
+            else f"HTTP status: {result.status_code}"
+        )
         result_prompt = (
-            "Результат выполненного HTTP-запроса приложен файлом. "
-            f"Команда: {command.raw_command}. HTTP status: {result.status_code}. "
+            "Результат выполненной машинной команды приложен файлом. "
+            f"Команда: {command.raw_command}. {status_text}. "
             f"Размер payload: {result.size} bytes. "
             "Проанализируй результат. Если нужен следующий запрос и ранее была "
             "согласована автоматическая цепочка, ответь только следующей машинной "
@@ -154,7 +181,7 @@ async def message(event: MessageCreated):
             return
 
         if folded in {"выполни запрос", "выполнить запрос"}:
-            await event.message.answer("ABIE: запрашиваю у ChatGPT машинную HTTP-команду.")
+            await event.message.answer("Запрашиваю у ChatGPT машинную команду: ABIE / LOKI / SERVER.")
             await run_abie_dialog(event.message)
             return
 
