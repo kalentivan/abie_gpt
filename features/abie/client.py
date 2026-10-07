@@ -64,7 +64,7 @@ class AbieHttpExecutor:
             command.method,
             url,
             json=command.body,
-            headers=self._headers(command.target),
+            headers={"Accept": "*/*"},
             timeout=timeout,
             stream=True,
             allow_redirects=False,
