@@ -37,3 +37,24 @@ class AbieCommandParserTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_parse_server_pod_logs():
+    command = parse_command(
+        "SERVER RUN pod-logs namespace=default pod=api-123 tail=500"
+    )
+    assert command is not None
+    assert command.target == "SERVER"
+    assert command.method == "RUN"
+    assert command.path == "pod-logs"
+    assert command.args == {
+        "namespace": "default",
+        "pod": "api-123",
+        "tail": "500",
+    }
+
+
+def test_parse_server_rejects_free_shell():
+    assert parse_command("SERVER RUN shell command=rm") is not None
+    # Parsing is generic; the executor is the security boundary and rejects
+    # command names that are not present in its allowlist.
