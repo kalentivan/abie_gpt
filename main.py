@@ -20,6 +20,7 @@ taxi = TaxiAgent()
 abie_http = AbieHttpExecutor()
 server_commands = ServerCommandExecutor(
     settings.server_output_dir,
+    settings.server_command_registry,
     timeout=settings.server_command_timeout,
     max_bytes=settings.server_max_output_bytes,
 )
@@ -183,6 +184,49 @@ async def message(event: MessageCreated):
         if folded in {"выполни запрос", "выполнить запрос"}:
             await event.message.answer("Запрашиваю у ChatGPT машинную команду: ABIE / LOKI / SERVER.")
             await run_abie_dialog(event.message)
+            return
+
+        if folded in {"server команды", "сервер команды", "словарь команд"}:
+            await send_text(
+                event.message,
+                "Разрешённые SERVER-команды:\n" + server_commands.registry_text(),
+            )
+            return
+
+        if folded.startswith("server добавить ") or folded.startswith("сервер добавить "):
+            payload = text.split(maxsplit=2)[2].strip()
+            if "=" not in payload:
+                await event.message.answer(
+                    "Формат: SERVER ДОБАВИТЬ <имя> = <команда с {аргументами}>"
+                )
+                return
+            name, command_text = (part.strip() for part in payload.split("=", 1))
+            await asyncio.to_thread(server_commands.add_command, name, command_text)
+            await event.message.answer(
+                f"SERVER-команда {name!r} добавлена в локальный словарь."
+            )
+            return
+
+        if text.startswith("-U ") or text.startswith("-u "):
+            command_text = text[3:].strip()
+            if not command_text:
+                await event.message.answer("После -U нужна команда.")
+                return
+            await event.message.answer(
+                "⚠️ Одноразовая согласованная SERVER-команда:\n" + command_text
+            )
+            result = await asyncio.to_thread(
+                server_commands.execute_unrestricted,
+                command_text,
+            )
+            await event.message.answer(
+                text=(
+                    f"SERVER -U exit {result.return_code} · {result.size} bytes · "
+                    f"{result.duration_seconds:.2f}s\n"
+                    f"Результат: {result.file_path.name}"
+                ),
+                attachments=[InputMedia(path=str(result.file_path))],
+            )
             return
 
         if folded in {"abie api", "аби api", "abie openapi", "аби openapi"}:
@@ -376,7 +420,7 @@ async def main():
         print(f"maxapi diagnostics failed: {error}")
     await asyncio.to_thread(gpt.start)
     print("MAX <-> ChatGPT запущен")
-    print("НД [название] = новый диалог | ДИАЛОГИ = список | ДИАЛОГ <номер/название> = переключить | СШ = скриншот | ПУЛЛ <ветка> = snapshot ABIE -> ChatGPT | РАСПАКУЙ = извлечь архив | Закажи такси | Выполни запрос | ABIE API | СТОП")
+    print("НД [название] = новый диалог | ДИАЛОГИ = список | ДИАЛОГ <номер/название> = переключить | СШ = скриншот | ПУЛЛ <ветка> = snapshot ABIE -> ChatGPT | РАСПАКУЙ = извлечь архив | Закажи такси | Выполни запрос | SERVER КОМАНДЫ | SERVER ДОБАВИТЬ | -U <команда> | ABIE API | СТОП")
     try:
         await dp.start_polling(bot)
     finally:
