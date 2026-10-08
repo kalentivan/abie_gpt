@@ -30,7 +30,7 @@ async def browser_call(fn, *args):
                     await asyncio.to_thread(gpt.start)
                 return await asyncio.to_thread(fn, *args)
             except Exception:
-                if attempt:
+                if attempt or fn.__name__ in {"send_with_files", "send"}:
                     raise
                 logging.exception("Browser operation failed; reconnecting")
                 gpt.driver = None
@@ -46,7 +46,7 @@ async def acknowledge(message):
 async def finish_message(message, placeholder, answer):
     if placeholder is not None:
         try:
-            edit = getattr(placeholder, "edit", None)
+            edit = getattr(getattr(placeholder, "message", None), "edit", None)
             if callable(edit):
                 await edit(text=answer)
                 return
