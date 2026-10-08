@@ -3,6 +3,7 @@ import traceback
 import logging
 import socket
 import time
+from datetime import datetime
 from pathlib import Path
 
 import maxapi
@@ -115,6 +116,16 @@ def spawn(coro):
                 logging.exception("Background command failed")
     task.add_done_callback(done)
 
+
+
+def capture_desktop():
+    import pyautogui
+
+    target_dir = Path("runtime/screenshots")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"desktop-{datetime.now():%Y%m%d-%H%M%S-%f}.png"
+    pyautogui.screenshot().save(str(target))
+    return target
 
 
 async def send_files(message, paths: list[Path]) -> None:
@@ -256,7 +267,7 @@ async def process_message(event: MessageCreated):
             return
 
         if text.upper() == "СШ":
-            path = await browser_call(gpt.screenshot)
+            path = await asyncio.to_thread(capture_desktop)
             await finish_message(event.message, placeholder, "Скриншот готов.")
             await send_files(event.message, [path])
             return
