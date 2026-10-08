@@ -1,5 +1,6 @@
 import asyncio
 import traceback
+import logging
 from pathlib import Path
 
 import maxapi
@@ -18,6 +19,53 @@ gpt = ChatGPTHandler()
 taxi = TaxiAgent()
 last_files: list[Path] = []
 bot_mode = "GPT"  # GPT | TAXI
+browser_lock = asyncio.Lock()
+active_tasks = set()
+
+async def browser_call(fn, *args):
+    async with browser_lock:
+        for attempt in range(2):
+            try:
+                if gpt.driver is None:
+                    await asyncio.to_thread(gpt.start)
+                return await asyncio.to_thread(fn, *args)
+            except Exception:
+                if attempt:
+                    raise
+                logging.exception("Browser operation failed; reconnecting")
+                gpt.driver = None
+                await asyncio.sleep(2)
+
+async def acknowledge(message):
+    try:
+        return await message.answer("Жду ответа...")
+    except Exception:
+        logging.exception("Acknowledgement failed")
+        return None
+
+async def finish_message(message, placeholder, answer):
+    if placeholder is not None:
+        try:
+            edit = getattr(placeholder, "edit", None)
+            if callable(edit):
+                await edit(text=answer)
+                return
+        except Exception:
+            logging.exception("Cannot edit placeholder; sending separately")
+    await message.answer(answer)
+
+def spawn(coro):
+    task = asyncio.create_task(coro)
+    active_tasks.add(task)
+    def done(finished):
+        active_tasks.discard(finished)
+        if not finished.cancelled():
+            try:
+                finished.result()
+            except Exception:
+                logging.exception("Background command failed")
+    task.add_done_callback(done)
+
 
 
 async def send_files(message, paths: list[Path]) -> None:
@@ -53,10 +101,21 @@ async def monitor_taxi(message) -> None:
 
 @dp.message_created()
 async def message(event: MessageCreated):
+    text = (event.message.body.text or "").strip()
+    if text.casefold() in {"пинг", "ping"}:
+        try:
+            await event.message.answer("ОК")
+        except Exception:
+            logging.exception("PING failed")
+        return
+    spawn(process_message(event))
+
+async def process_message(event: MessageCreated):
     global last_files, bot_mode
     text = (event.message.body.text or "").strip()
     attachments = list(event.message.body.attachments or [])
 
+    placeholder = await acknowledge(event.message)
     try:
         incoming = await asyncio.to_thread(download_attachments, attachments)
         if incoming:
@@ -130,13 +189,25 @@ async def message(event: MessageCreated):
             )
             return
 
-        if text.upper() == "НД":
-            await asyncio.to_thread(gpt.new_dialog)
-            await event.message.answer("Новый диалог открыт.")
+        if folded == "сд":
+            names = await asyncio.to_thread(gpt.list_dialogs)
+            await finish_message(event.message, placeholder, "Диалоги:\n" + "\n".join(names) if names else "Список диалогов пуст.")
+            return
+
+        if folded == "нд" or folded.startswith("нд "):
+            name = text[2:].strip() or None
+            await browser_call(gpt.new_dialog, name)
+            await finish_message(event.message, placeholder, f"Новый диалог открыт: {name}" if name else "Новый диалог открыт.")
+            return
+
+        if folded.startswith("д ") or folded.startswith("диалог "):
+            name = text.split(maxsplit=1)[1].strip()
+            await browser_call(gpt.switch_dialog, name)
+            await finish_message(event.message, placeholder, f"Переключено на диалог: {name}")
             return
 
         if text.upper() == "СШ":
-            path = await asyncio.to_thread(gpt.screenshot)
+            path = await browser_call(gpt.screenshot)
             await send_files(event.message, [path])
             return
 
@@ -159,7 +230,7 @@ async def message(event: MessageCreated):
             )
             await event.message.answer("ПУЛЛ: загружаю архив в ChatGPT...")
             prompt = f"ПУЛЛ {pull_version}: свежий snapshot ABIE ветки {branch}, commit {commit}. Архив приложен."
-            answer, outgoing = await asyncio.to_thread(gpt.send_with_files, prompt, [archive])
+            answer, outgoing = await browser_call(gpt.send_with_files, prompt, [archive])
             await event.message.answer("ПУЛЛ: ChatGPT ответил. Отправляю ответ в MAX.")
             for i in range(0, len(answer), 3900):
                 await event.message.answer(answer[i:i + 3900])
@@ -191,37 +262,36 @@ async def message(event: MessageCreated):
             return
 
         print(f"MAX <- {text!r}; files={[p.name for p in files_for_gpt]!r}")
-        answer, outgoing = await asyncio.to_thread(
+        answer, outgoing = await browser_call(
             gpt.send_with_files,
             text or "Посмотри приложенные файлы.",
             files_for_gpt,
         )
 
-        for i in range(0, len(answer), 3900):
+        await finish_message(event.message, placeholder, answer[:3900])
+        for i in range(3900, len(answer), 3900):
             await event.message.answer(answer[i:i + 3900])
         if outgoing:
             await send_files(event.message, outgoing)
 
     except Exception as error:
         traceback.print_exc()
-        await event.message.answer(f"Ошибка: {type(error).__name__}: {error}")
+        try:
+            await finish_message(event.message, placeholder, f"Ошибка: {type(error).__name__}: {error}")
+        except Exception:
+            logging.exception("Failed to report error")
 
 
 async def main():
-    print(f"maxapi loaded from: {Path(maxapi.__file__).resolve()}")
-    try:
-        from maxapi.enums.update import UpdateType
-        print("maxapi update types:", [str(item.value) for item in UpdateType])
-    except Exception as error:
-        print(f"maxapi diagnostics failed: {error}")
-    await asyncio.to_thread(gpt.start)
-    print("MAX <-> ChatGPT запущен")
-    print("НД = новый диалог | СШ = скриншот | ПУЛЛ <ветка> = snapshot ABIE -> ChatGPT | РАСПАКУЙ = извлечь архив | Закажи такси")
-    try:
-        await dp.start_polling(bot)
-    finally:
-        await asyncio.to_thread(taxi.close)
-        await asyncio.to_thread(gpt.close)
+    print(f"maxapi loaded from: {Path(maxapi.__file__).resolve()}", flush=True)
+    while True:
+        try:
+            await dp.start_polling(bot)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.exception("MAX polling crashed; restarting in 5 seconds")
+        await asyncio.sleep(5)
 
 
 if __name__ == "__main__":
