@@ -1,4 +1,6 @@
 import shutil
+import json
+import threading
 import time
 from pathlib import Path
 
@@ -21,6 +23,47 @@ GPT_DOWNLOADS.mkdir(parents=True, exist_ok=True)
 class ChatGPTHandler:
     def __init__(self):
         self.driver = None
+        self.dialogs_path = Path("runtime/dialogs.json")
+        self.dialogs_path.parent.mkdir(parents=True, exist_ok=True)
+        self.dialogs = self._load_dialogs()
+        self.current_dialog = None
+        self._dialog_lock = threading.RLock()
+
+    def _load_dialogs(self):
+        try:
+            data = json.loads(self.dialogs_path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def _save_dialogs(self):
+        temporary = self.dialogs_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(self.dialogs, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary.replace(self.dialogs_path)
+
+    def remember_dialog(self):
+        if self.current_dialog and self.driver:
+            url = self.driver.current_url
+            if "/c/" in url:
+                with self._dialog_lock:
+                    self.dialogs[self.current_dialog] = url
+                    self._save_dialogs()
+
+    def list_dialogs(self):
+        with self._dialog_lock:
+            return sorted(self.dialogs)
+
+    def switch_dialog(self, name):
+        with self._dialog_lock:
+            url = self.dialogs.get(name)
+            if not url:
+                raise ValueError(f"Диалог «{name}» не найден. Используй СД.")
+            if not url.startswith("https://chatgpt.com/c/"):
+                raise ValueError("Некорректная ссылка на диалог")
+            self.driver.get(url)
+            self.find_input_box(timeout=90)
+            self.current_dialog = name
+            return url
 
     def log(self, message):
         print(f"[GPT] {message}", flush=True)
@@ -285,6 +328,8 @@ class ChatGPTHandler:
         self.log(f"URL до отправки: {self.driver.current_url}")
 
         before = self.get_page_text()
+        previous_answer = self.get_assistant_text()
+        previous_turn_count = len(self._assistant_turns())
         self.log(f"Текст страницы до отправки: {len(before)} символов")
 
         input_box = self.find_input_box()
@@ -299,6 +344,7 @@ class ChatGPTHandler:
 
         answer = self._wait_answer(previous_answer, previous_turn_count)
 
+        self.remember_dialog()
         self.log(f"URL после ответа: {self.driver.current_url}")
         self.log(f"Получен ответ: {answer[:300]!r}")
         self.log("=" * 50)
@@ -360,10 +406,12 @@ class ChatGPTHandler:
         self.log("Не удалось безопасно выделить ответ из текста страницы")
         return None
 
-    def new_dialog(self):
+    def new_dialog(self, name=None):
+        self.remember_dialog()
         self.log("Открываю новый диалог...")
         self.driver.get("https://chatgpt.com/")
         self.find_input_box()
+        self.current_dialog = name or None
         self.log(f"Новый диалог открыт: {self.driver.current_url}")
 
     def screenshot(self):
