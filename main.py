@@ -1,6 +1,8 @@
 import asyncio
 import traceback
 import logging
+import socket
+import time
 from pathlib import Path
 
 import maxapi
@@ -21,15 +23,42 @@ last_files: list[Path] = []
 bot_mode = "GPT"  # GPT | TAXI
 browser_lock = asyncio.Lock()
 active_tasks = set()
+last_error = None
+last_error_at = None
+browser_ready = False
+
+def record_error(error, component="GPT"):
+    global last_error, last_error_at, browser_ready
+    last_error = f"{component}: {type(error).__name__}: {error}"
+    last_error_at = time.strftime("%Y-%m-%d %H:%M:%S")
+    if component == "GPT":
+        browser_ready = False
+    logging.error("Health: %s", last_error)
+
+def ping_status():
+    try:
+        with socket.create_connection(("127.0.0.1", 9222), timeout=0.5):
+            port_ok = True
+    except OSError:
+        port_ok = False
+    state = ("Brave CDP недоступен (127.0.0.1:9222)" if not port_ok else
+             "Brave доступен, ChatGPT не подтверждён" if not browser_ready else
+             "Brave доступен, ChatGPT подключён")
+    error = f"\nПоследняя ошибка ({last_error_at}): {last_error}" if last_error else ""
+    return (f"MAX: ОК\nGPT: {state}" + error)[:3900]
+
 
 async def browser_call(fn, *args):
+    global browser_ready
     async with browser_lock:
         for attempt in range(2):
             try:
                 if gpt.driver is None:
                     await asyncio.to_thread(gpt.start)
+                browser_ready = True
                 return await asyncio.to_thread(fn, *args)
-            except Exception:
+            except Exception as error:
+                record_error(error)
                 if attempt or fn.__name__ in {"send_with_files", "send"}:
                     raise
                 logging.exception("Browser operation failed; reconnecting")
@@ -104,7 +133,7 @@ async def message(event: MessageCreated):
     text = (event.message.body.text or "").strip()
     if text.casefold() in {"пинг", "ping"}:
         try:
-            await event.message.answer("ОК")
+            await event.message.answer(await asyncio.to_thread(ping_status))
         except Exception:
             logging.exception("PING failed")
         return
@@ -275,6 +304,7 @@ async def process_message(event: MessageCreated):
             await send_files(event.message, outgoing)
 
     except Exception as error:
+        record_error(error, "COMMAND")
         traceback.print_exc()
         try:
             await finish_message(event.message, placeholder, f"Ошибка: {type(error).__name__}: {error}")
@@ -289,7 +319,8 @@ async def main():
             await dp.start_polling(bot)
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as error:
+            record_error(error, "MAX polling")
             logging.exception("MAX polling crashed; restarting in 5 seconds")
         await asyncio.sleep(5)
 
