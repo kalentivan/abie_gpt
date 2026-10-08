@@ -4,7 +4,8 @@ from pathlib import Path
 
 import requests
 
-from seleniumbase import Driver
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.keys import Keys
 
 from config import settings
@@ -25,22 +26,23 @@ class ChatGPTHandler:
         print(f"[GPT] {message}", flush=True)
 
     def start(self):
-        self.log("Запускаю Brave...")
-        self.log(f"Binary: {BRAVE_PATH}")
-        self.log(f"Profile: {BOT_PROFILE}")
+        self.log("Подключаюсь к открытому Brave через CDP 127.0.0.1:9222...")
+        options = Options()
+        options.debugger_address = "127.0.0.1:9222"
+        try:
+            self.driver = webdriver.Chrome(options=options)
+        except Exception as error:
+            raise RuntimeError(
+                "Не удалось подключиться к Brave на 127.0.0.1:9222. "
+                "Запустите Brave с --remote-debugging-port=9222 "
+                "и отдельным --user-data-dir."
+            ) from error
 
-        self.driver = Driver(
-            browser="chrome",
-            binary_location=BRAVE_PATH,
-            user_data_dir=BOT_PROFILE,
-            headless=False,
-        )
+        self.log(f"Подключён к Brave: {self.driver.current_url}")
+        if not self.driver.current_url.startswith("https://chatgpt.com"):
+            self.driver.get("https://chatgpt.com/")
 
-        self.log("Brave запущен")
-        self.driver.get("https://chatgpt.com/")
-        self.log(f"Страница открыта: {self.driver.current_url}")
-
-        self.find_input_box()
+        self.find_input_box(timeout=90)
         self.log("Поле ввода найдено")
         self.log("ChatGPT готов")
 
@@ -377,6 +379,5 @@ class ChatGPTHandler:
 
     def close(self):
         if self.driver:
-            self.log("Закрываю Brave...")
-            self.driver.quit()
+            self.log("Отключаю Selenium от Brave (окно остаётся открытым)")
             self.driver = None
