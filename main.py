@@ -48,9 +48,29 @@ def ping_status():
     return (f"MAX: ОК\nGPT: {state}" + error)[:3900]
 
 
+def check_cdp_available():
+    try:
+        with socket.create_connection(("127.0.0.1", 9222), timeout=0.75):
+            return
+    except OSError as error:
+        raise RuntimeError(
+            "Brave недоступен на 127.0.0.1:9222. "
+            "Запусти Brave с --remote-debugging-port=9222."
+        ) from error
+
+
 async def browser_call(fn, *args):
     global browser_ready
     async with browser_lock:
+        # Fail fast before Selenium/ChromeDriver starts its long connection timeout.
+        if gpt.driver is None:
+            try:
+                await asyncio.wait_for(
+                    asyncio.to_thread(check_cdp_available), timeout=2
+                )
+            except Exception as error:
+                record_error(error)
+                raise
         for attempt in range(2):
             try:
                 if gpt.driver is None:
@@ -237,6 +257,7 @@ async def process_message(event: MessageCreated):
 
         if text.upper() == "СШ":
             path = await browser_call(gpt.screenshot)
+            await finish_message(event.message, placeholder, "Скриншот готов.")
             await send_files(event.message, [path])
             return
 
