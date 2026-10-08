@@ -85,25 +85,25 @@ class ChatGPTHandler:
 
         return ""
 
+    def _assistant_turns(self):
+        selectors = (
+            '[data-message-author-role="assistant"]',
+            '[data-testid^="conversation-turn-"] [data-message-author-role="assistant"]',
+            'article[data-turn="assistant"]',
+        )
+        for selector in selectors:
+            turns = self.driver.find_elements("css selector", selector)
+            if turns:
+                return turns
+        return []
+
     def get_assistant_text(self):
         try:
-            labels = self.driver.find_elements(
-                "xpath",
-                "//h4[normalize-space()='ChatGPT said:']",
-            )
-
-            if not labels:
-                return None
-
-            label = labels[-1]
-            turn = label.find_element(
-                "xpath",
-                "./following-sibling::*[1]",
-            )
-
-            text = turn.text.strip()
-            return text or None
-
+            turns = self._assistant_turns()
+            if turns:
+                text = turns[-1].text.strip()
+                return text or None
+            return None
         except Exception as error:
             self.log(f"Не удалось прочитать assistant: {error}")
             return None
@@ -221,16 +221,12 @@ class ChatGPTHandler:
 
     def _assistant_links(self):
         try:
-            labels = self.driver.find_elements(
-                "xpath",
-                "//h4[normalize-space()='ChatGPT said:']",
-            )
-            if not labels:
+            turns = self._assistant_turns()
+            if not turns:
                 return []
-            turn = labels[-1].find_element("xpath", "./following-sibling::*[1]")
             return [
                 link.get_attribute("href")
-                for link in turn.find_elements("css selector", "a[href]")
+                for link in turns[-1].find_elements("css selector", "a[href]")
                 if link.get_attribute("href")
             ]
         except Exception as error:
@@ -301,7 +297,7 @@ class ChatGPTHandler:
         self.click_send(input_box)
         self.log("Запрос отправлен")
 
-        answer = self._wait_answer(before)
+        answer = self._wait_answer(previous_answer, previous_turn_count)
 
         self.log(f"URL после ответа: {self.driver.current_url}")
         self.log(f"Получен ответ: {answer[:300]!r}")
@@ -309,52 +305,50 @@ class ChatGPTHandler:
 
         return answer
 
-    def _wait_answer(self, before):
+    def _wait_answer(self, previous_answer, previous_turn_count):
         deadline = time.time() + GPT_TIMEOUT
         last_answer = None
+        last_change = time.monotonic()
         last_log = 0
 
-        self.log("Жду ответ ChatGPT...")
-
+        self.log("Жду новый ответ ChatGPT...")
         while time.time() < deadline:
             try:
+                turns = self._assistant_turns()
                 answer = self.get_assistant_text()
+                new_turn = len(turns) > previous_turn_count
+                changed = bool(answer and answer != previous_answer)
+                if answer and (new_turn or changed):
+                    if answer != last_answer:
+                        last_answer = answer
+                        last_change = time.monotonic()
+                        self.log(f"Получен текст ответа: {len(answer)} символов")
 
-                if answer and answer != last_answer:
-                    self.log(
-                        f"Ответ: {len(answer)} символов | "
-                        f"{answer[-150:]!r}"
+                    # A visible Stop button means generation is still running.
+                    stop_buttons = self.driver.find_elements(
+                        "css selector",
+                        'button[data-testid="stop-button"], button[aria-label*="Stop"], '
+                        'button[aria-label*="Останов"]',
                     )
-                    last_answer = answer
-
-                complete = self.driver.find_elements(
-                    "xpath",
-                    "//*[@role='status' and normalize-space()='Response complete']",
-                )
-
-                if last_answer and complete:
-                    self.log("ChatGPT сообщил: Response complete")
-                    self.log(f"Финальный ответ: {last_answer!r}")
-                    return last_answer
+                    generating = any(button.is_displayed() for button in stop_buttons)
+                    if not generating and time.monotonic() - last_change >= 3:
+                        self.log("Ответ стабилен, генерация завершена")
+                        return last_answer
 
                 if time.time() - last_log >= 5:
                     self.log(
-                        f"Ожидание... "
-                        f"answer={'YES' if last_answer else 'NO'}, "
-                        f"complete={'YES' if complete else 'NO'}"
+                        f"Ожидание... turns={len(turns)}, new={new_turn}, "
+                        f"answer={'YES' if last_answer else 'NO'}"
                     )
                     last_log = time.time()
-
             except Exception as error:
                 self.log(f"Ошибка ожидания: {type(error).__name__}: {error}")
-
             time.sleep(0.3)
 
         if last_answer:
             self.log("Timeout, возвращаю последний прочитанный ответ")
             return last_answer
-
-        raise TimeoutError("Не удалось получить ответ ChatGPT")
+        raise TimeoutError("Не удалось получить новый ответ ChatGPT")
 
     def _extract_from_page(self, before, after):
         if after.startswith(before):
