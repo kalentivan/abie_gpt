@@ -90,42 +90,59 @@ class ChatGPTHandler:
         self.log("ChatGPT готов")
 
     def find_input_box(self, timeout=30):
-        # Only the ChatGPT composer. Generic contenteditable elements also match
-        # editable code blocks in assistant messages and must never be used.
+        # Identify the main composer by its surrounding form, never by a
+        # page-wide contenteditable search (editable code blocks use that too).
         selectors = (
             "#prompt-textarea",
             "#mobile-composer-prompt",
-            '[data-testid="composer-input"][contenteditable="true"]',
-            'form [contenteditable="true"][data-testid="composer-input"]',
+            '[data-testid="composer-input"]',
+            'form [contenteditable="true"][role="textbox"]',
+            'form div[contenteditable="true"]',
+            'form textarea',
         )
         deadline = time.time() + timeout
 
         while time.time() < deadline:
             for selector in selectors:
                 for element in self.driver.find_elements("css selector", selector):
-                    if element.is_displayed() and element.is_enabled():
-                        if self._is_chat_composer(element):
-                            self.log(f"Composer: {selector}")
-                            return element
+                    if (element.is_displayed() and element.is_enabled()
+                            and self._is_chat_composer(element)):
+                        self.log(f"Composer: {selector}")
+                        return element
             time.sleep(0.5)
 
         raise RuntimeError(
             "Не найдено безопасное поле ввода ChatGPT. "
-            "Ввод в другие редактируемые элементы запрещён."
+            "Убедитесь, что открыт чат и видна форма отправки."
         )
 
     def _is_chat_composer(self, element):
         return bool(self.driver.execute_script(
             """
             const el = arguments[0];
-            if (!el.isConnected || el.closest('[data-message-author-role], article[data-turn]'))
-                return false;
-            const input = el.matches('[contenteditable="true"], textarea')
-                ? el : el.querySelector('[contenteditable="true"], textarea');
-            if (!input) return false;
-            return input.id === 'prompt-textarea'
-                || input.id === 'mobile-composer-prompt'
-                || input.getAttribute('data-testid') === 'composer-input';
+            if (!el.isConnected || el.closest(
+                '[data-message-author-role], article[data-turn], '
+                '[data-testid^="conversation-turn-"], [role="dialog"]'
+            )) return false;
+            if (!el.matches('[contenteditable="true"], textarea')) return false;
+            if (el.closest('.monaco-editor, .cm-editor, .CodeMirror, '
+                + '[data-testid*="code-block"], [class*="code-editor"]')) return false;
+
+            const knownInput = ['prompt-textarea', 'mobile-composer-prompt']
+                .includes(el.id) || el.getAttribute('data-testid') === 'composer-input';
+            const form = el.closest('form');
+            if (!knownInput && !form) return false;
+            if (form) {
+                // Avoid unrelated forms and ambiguity: there should only be
+                // one editable chat field within this form.
+                const fields = [...form.querySelectorAll(
+                    '[contenteditable="true"], textarea'
+                )].filter(node => !node.closest(
+                    '[data-message-author-role], [data-testid^="conversation-turn-"]'
+                ));
+                if (fields.length !== 1 || fields[0] !== el) return false;
+            }
+            return true;
             """,
             element,
         ))
