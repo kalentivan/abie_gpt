@@ -3,6 +3,7 @@ import json
 import threading
 import time
 from pathlib import Path
+from datetime import datetime
 
 import requests
 
@@ -89,6 +90,40 @@ class ChatGPTHandler:
         self.log("Поле ввода найдено")
         self.log("ChatGPT готов")
 
+    def _diagnose_composer(self):
+        # Capture evidence on the user's own machine; do not log page text,
+        # message contents, cookies, or full DOM.
+        try:
+            details = self.driver.execute_script(
+                """
+                return {
+                  url: location.origin + location.pathname,
+                  readyState: document.readyState,
+                  title: document.title,
+                  bodyPresent: !!document.body,
+                  composerCandidates: [...document.querySelectorAll(
+                    '[contenteditable], textarea, [role="textbox"]'
+                  )].slice(0, 40).map(el => ({
+                    tag: el.tagName, id: el.id,
+                    testid: el.getAttribute('data-testid'),
+                    role: el.getAttribute('role'),
+                    editable: el.getAttribute('contenteditable'),
+                    inForm: !!el.closest('form'),
+                    inMessage: !!el.closest('[data-message-author-role], [data-testid^="conversation-turn-"]'),
+                    visible: !!(el.getClientRects().length)
+                  }))
+                };
+                """
+            )
+            self.log("Диагностика composer: " + json.dumps(details, ensure_ascii=False))
+            dest = Path("runtime/screenshots")
+            dest.mkdir(parents=True, exist_ok=True)
+            screenshot = dest / f"composer-failure-{datetime.now():%Y%m%d-%H%M%S}.png"
+            self.driver.save_screenshot(str(screenshot))
+            self.log(f"Скриншот ошибки: {screenshot}")
+        except Exception as error:
+            self.log(f"Диагностика composer недоступна: {type(error).__name__}: {error}")
+
     def find_input_box(self, timeout=30):
         # Identify the main composer by its surrounding form, never by a
         # page-wide contenteditable search (editable code blocks use that too).
@@ -111,6 +146,7 @@ class ChatGPTHandler:
                         return element
             time.sleep(0.5)
 
+        self._diagnose_composer()
         raise RuntimeError(
             "Не найдено безопасное поле ввода ChatGPT. "
             "Убедитесь, что открыт чат и видна форма отправки."
