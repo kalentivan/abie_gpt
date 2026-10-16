@@ -90,27 +90,57 @@ class ChatGPTHandler:
         self.log("ChatGPT готов")
 
     def find_input_box(self, timeout=30):
-        selectors = [
+        # Only the ChatGPT composer. Generic contenteditable elements also match
+        # editable code blocks in assistant messages and must never be used.
+        selectors = (
             "#prompt-textarea",
             "#mobile-composer-prompt",
-            '[contenteditable="true"][role="textbox"]',
-            'div[contenteditable="true"]',
-            "textarea",
-        ]
+            '[data-testid="composer-input"][contenteditable="true"]',
+            'form [contenteditable="true"][data-testid="composer-input"]',
+        )
         deadline = time.time() + timeout
 
         while time.time() < deadline:
             for selector in selectors:
-                try:
-                    for element in self.driver.find_elements("css selector", selector):
-                        if element.is_displayed() and element.is_enabled():
+                for element in self.driver.find_elements("css selector", selector):
+                    if element.is_displayed() and element.is_enabled():
+                        if self._is_chat_composer(element):
                             self.log(f"Composer: {selector}")
                             return element
-                except Exception:
-                    pass
             time.sleep(0.5)
 
-        raise RuntimeError("Не найдено поле ввода ChatGPT")
+        raise RuntimeError(
+            "Не найдено безопасное поле ввода ChatGPT. "
+            "Ввод в другие редактируемые элементы запрещён."
+        )
+
+    def _is_chat_composer(self, element):
+        return bool(self.driver.execute_script(
+            """
+            const el = arguments[0];
+            if (!el.isConnected || el.closest('[data-message-author-role], article[data-turn]'))
+                return false;
+            const input = el.matches('[contenteditable="true"], textarea')
+                ? el : el.querySelector('[contenteditable="true"], textarea');
+            if (!input) return false;
+            return input.id === 'prompt-textarea'
+                || input.id === 'mobile-composer-prompt'
+                || input.getAttribute('data-testid') === 'composer-input';
+            """,
+            element,
+        ))
+
+    def _focus_chat_composer(self, element):
+        if not self._is_chat_composer(element):
+            raise RuntimeError("Отмена отправки: выбран не composer ChatGPT")
+        element.click()
+        focused = self.driver.execute_script(
+            "return document.activeElement === arguments[0] "
+            "|| arguments[0].contains(document.activeElement);",
+            element,
+        )
+        if not focused or not self._is_chat_composer(element):
+            raise RuntimeError("Отмена отправки: фокус не в поле ввода ChatGPT")
 
     def get_page_text(self):
         selectors = ["main", '[role="main"]', "body"]
@@ -182,6 +212,7 @@ class ChatGPTHandler:
 
         self.log("Активная кнопка отправки не появилась, использую Enter")
         input_box = self.find_input_box()
+        self._focus_chat_composer(input_box)
         input_box.send_keys(Keys.ENTER)
 
     def upload_files(self, paths):
@@ -333,7 +364,7 @@ class ChatGPTHandler:
         self.log(f"Текст страницы до отправки: {len(before)} символов")
 
         input_box = self.find_input_box()
-        input_box.click()
+        self._focus_chat_composer(input_box)
         input_box.send_keys(prompt)
 
         self.log("Текст введён")
